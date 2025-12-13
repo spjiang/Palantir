@@ -1,0 +1,83 @@
+name: flood-demo-os
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  model-service:
+    build:
+      context: ./services/model
+    environment:
+      MODEL_SEED: "42"
+    ports:
+      - "8002:8002"
+
+  api:
+    build:
+      context: ./services/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://demo:demo@postgres:5432/demo
+      REDIS_URL: redis://redis:6379/0
+      MODEL_SERVICE_URL: http://model-service:8002
+      # 演示级：允许自动初始化样例数据
+      AUTO_SEED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      model-service:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  agent:
+    build:
+      context: ./services/agent
+    environment:
+      API_BASE_URL: http://api:8000
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "8001:8001"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_AGENT_BASE_URL: http://localhost:8001
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_started
+      agent:
+        condition: service_started
+
+volumes:
+  pgdata:
+
+
