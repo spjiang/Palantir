@@ -11,13 +11,13 @@
 
 ## 一键启动
 
-1) 进入目录：
+1. 进入目录：
 
 ```bash
 cd demo-os
 ```
 
-2)（可选）设置 DeepSeek：
+1. （可选）设置 DeepSeek：
 
 ```bash
 export DEEPSEEK_API_KEY="你的Key"
@@ -25,10 +25,10 @@ export DEEPSEEK_BASE_URL="https://api.deepseek.com"  # 如需自定义
 export DEEPSEEK_MODEL="deepseek-chat"
 ```
 
-3) 启动：
+1. 启动：
 
 ```bash
-docker compose up --build
+docker-compose up --build
 ```
 
 ## 访问入口
@@ -41,17 +41,15 @@ docker compose up --build
 ## 演示闭环（对应 V7 1.1）
 
 1. 风险热力图/TopN：前端调用后端 `/risk/topn`
-2. 智能体研判：前端调用智能体 `/agent/chat`（智能体会调用后端工具）
-3. 一键生成任务包并下发：智能体工具 `create_task_pack` + `trigger_workflow`
-4. 移动端回执：前端“任务”页回执 `/workflow/tasks/{id}/ack`
-5. 一键生成战报：`/reports/incidents/{id}`
+1. 智能体研判：前端调用智能体 `/agent/chat`（智能体会调用后端工具）
+1. 一键生成任务包并下发：智能体工具 `create_task_pack` + `trigger_workflow`
+1. 移动端回执：前端“任务”页回执 `/workflow/tasks/{id}/ack`
+1. 一键生成战报：`/reports/incidents/{id}`
 
 ## 目录结构
 
-- `compose.yaml`：一键编排
+- `docker-compose.yaml`：一键编排
 - `services/api/`：后端 API（数据/本体查询/工作流/战报）
 - `services/model/`：小模型推理服务（开源）
 - `services/agent/`：LangChain 智能体服务（DeepSeek 可选）
 - `frontend/`：Vue3 前端
-
-
