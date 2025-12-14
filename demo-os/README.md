@@ -6,7 +6,7 @@
 - 后端：Python（FastAPI）
 - 智能体：LangChain
 - 大模型：DeepSeek（可选；无 Key 时自动降级为规则式智能体）
-- 小模型：开源（scikit-learn，演示级风险评分/解释）
+- 小模型：开源（纯 Python 可解释打分，演示级风险评分/解释）
 - 部署：docker-compose（含模型服务同样 compose 部署）
 
 ## 一键启动
