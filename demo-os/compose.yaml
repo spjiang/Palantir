@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: demo
       POSTGRES_DB: demo
     ports:
-      - "5432:5432"
+      - "7432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "7379:6379"
 
   model-service:
     build:
@@ -28,7 +28,7 @@ services:
     environment:
       MODEL_SEED: "42"
     ports:
-      - "8002:8002"
+      - "7002:8002"
 
   api:
     build:
@@ -47,7 +47,7 @@ services:
       model-service:
         condition: service_started
     ports:
-      - "8000:8000"
+      - "7000:8000"
 
   agent:
     build:
@@ -61,16 +61,16 @@ services:
       api:
         condition: service_started
     ports:
-      - "8001:8001"
+      - "7001:8001"
 
   frontend:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
-      VITE_AGENT_BASE_URL: http://localhost:8001
+      VITE_API_BASE_URL: http://localhost:7000
+      VITE_AGENT_BASE_URL: http://localhost:7001
     ports:
-      - "8080:8080"
+      - "7080:8080"
     depends_on:
       api:
         condition: service_started

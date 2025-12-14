@@ -33,10 +33,10 @@ docker compose up --build
 
 ## 访问入口
 
-- 前端：`http://localhost:8080`
-- 后端 API：`http://localhost:8000/docs`
-- 智能体服务：`http://localhost:8001/docs`
-- 小模型服务：`http://localhost:8002/docs`
+- 前端：`http://localhost:7080`
+- 后端 API：`http://localhost:7000/docs`
+- 智能体服务：`http://localhost:7001/docs`
+- 小模型服务：`http://localhost:7002/docs`
 
 ## 演示闭环（对应 V7 1.1）
 
