@@ -1,4 +1,4 @@
-name: flood-demo-os
+version: "2.4"
 
 services:
   postgres:
@@ -79,5 +79,4 @@ services:
 
 volumes:
   pgdata:
-
 
