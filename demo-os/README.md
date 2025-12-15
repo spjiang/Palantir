@@ -25,18 +25,44 @@ export DEEPSEEK_BASE_URL="https://api.deepseek.com"  # 如需自定义
 export DEEPSEEK_MODEL="deepseek-chat"
 ```
 
-1. 启动：
+1. （推荐）设置对外访问地址（给浏览器用；默认 `10.156.196.228`）：
 
 ```bash
-docker-compose up --build
+export PUBLIC_HOST="10.156.196.228"
+```
+
+1. 启动（使用新版 Compose v2：`docker compose`，不要用老的 `docker-compose`）：
+
+```bash
+docker compose up -d --build
 ```
 
 ## 访问入口
 
-- 前端：`http://localhost:7080`
-- 后端 API：`http://localhost:7000/docs`
-- 智能体服务：`http://localhost:7001/docs`
-- 小模型服务：`http://localhost:7002/docs`
+- 前端：`http://<PUBLIC_HOST>:7080`
+- 后端 API：`http://<PUBLIC_HOST>:7000/docs`
+- 智能体服务：`http://<PUBLIC_HOST>:7001/docs`
+- 小模型服务：`http://<PUBLIC_HOST>:7002/docs`
+
+## 常见报错：`KeyError: 'ContainerConfig'`
+
+如果你看到类似：
+
+- `ERROR: for frontend 'ContainerConfig'`
+- `KeyError: 'ContainerConfig'`
+
+通常是因为服务器上在用 **老的 `docker-compose`(Python 版 1.x，例如 1.29.2)**，它与新版 Docker Engine（例如 28.x）不兼容。
+
+解决方式：
+
+```bash
+# 1) 用 Compose v2（docker 自带插件）
+docker compose version
+
+# 2) 清理旧容器/孤儿容器后重建
+docker compose down --remove-orphans
+docker compose up -d --build
+```
 
 ## 演示闭环（对应 V7 1.1）
 
