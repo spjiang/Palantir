@@ -67,8 +67,10 @@ services:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:7000
-      VITE_AGENT_BASE_URL: http://localhost:7001
+      # 对浏览器暴露的访问地址：默认指向服务器 IP；可用环境变量覆盖
+      # 例：PUBLIC_HOST=1.2.3.4 docker compose up -d --build
+      VITE_API_BASE_URL: "http://${PUBLIC_HOST:-10.156.196.228}:7000"
+      VITE_AGENT_BASE_URL: "http://${PUBLIC_HOST:-10.156.196.228}:7001"
     ports:
       - "7080:8080"
     depends_on:
