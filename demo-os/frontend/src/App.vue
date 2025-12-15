@@ -99,8 +99,9 @@
 import axios from "axios";
 import { ref } from "vue";
 
-const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const agentBase = import.meta.env.VITE_AGENT_BASE_URL || "http://localhost:8001";
+// 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
+const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
+const agentBase = import.meta.env.VITE_AGENT_BASE_URL || "/agent";
 
 const areaId = ref("A-001");
 const incidentId = ref<string>("");
