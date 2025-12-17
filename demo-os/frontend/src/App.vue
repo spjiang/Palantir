@@ -38,6 +38,23 @@
         </table>
       </section>
 
+      <section class="card wide">
+        <h3>系统分层与节点（含数据接入与治理）</h3>
+        <div class="layer-grid">
+          <div v-for="layer in layerBlocks" :key="layer.name" class="layer-card">
+            <div class="layer-title">{{ layer.name }}</div>
+            <div class="layer-desc">{{ layer.desc }}</div>
+            <ul class="layer-list">
+              <li v-for="node in layer.nodes" :key="node.title">
+                <div class="node-title">{{ node.title }}</div>
+                <div class="node-detail">{{ node.detail }}</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="hint">说明：为前端展示而简化的节点清单；实际数据流与接口见方案书 1.1.2。</div>
+      </section>
+
       <section class="card">
         <h3>2) 暴雨参谋长智能体（对话）</h3>
         <div class="row">
@@ -102,6 +119,79 @@ import { ref } from "vue";
 // 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const agentBase = import.meta.env.VITE_AGENT_BASE_URL || "/agent";
+
+const layerBlocks = [
+  {
+    name: "L1 数据接入与治理",
+    desc: "采集、落库、质量与口径统一",
+    nodes: [
+      { title: "接入连接器", detail: "雨量/雷达/水位/泵站/路况/事件" },
+      { title: "Raw 落地", detail: "原始数据原样落库，保存完整上下文" },
+      { title: "ODS 明细", detail: "清洗对齐后的操作型明细层，统一口径" },
+      { title: "TSDB 时序", detail: "高频指标/传感器时序存储与查询" },
+      { title: "DQ 标签", detail: "完整性/及时性/一致性等质量标记与评分" },
+    ],
+  },
+  {
+    name: "L2 语义与状态（本体）",
+    desc: "对象/关系/责任归属与状态快照",
+    nodes: [
+      { title: "实体/关系", detail: "路段/泵站/管网/责任单位/预案等知识" },
+      { title: "空间归属", detail: "责任片区/汇水区/行政区/服务范围" },
+      { title: "状态快照", detail: "get_object_state 对象当前属性/特征/质量标记" },
+    ],
+  },
+  {
+    name: "L3 风险推理（模型）",
+    desc: "风险评分 + 解释 + 置信度",
+    nodes: [
+      { title: "risk_score / level", detail: "按路段/网格输出风险分与等级" },
+      { title: "explain_factors", detail: "雨强、水位、泵站工况、低洼地形等解释因子" },
+      { title: "confidence", detail: "置信度，反映模型判断确定性" },
+      { title: "TopN / 热力图 API", detail: "对上层服务提供热力图与 TopN 接口" },
+    ],
+  },
+  {
+    name: "L4 智能体决策",
+    desc: "有依据的建议 → 任务包",
+    nodes: [
+      { title: "RAG 证据检索", detail: "预案/规程/历史战报/对象上下文" },
+      {
+        title: "任务包编排",
+        detail:
+          "create_task_pack -> TaskPack/tasks[]，生成派单所需字段：owner_org（责任单位/队伍）、sla_minutes（完成时限）、required_evidence[]（必传证据：定位/照片/视频/测量值等）、need_approval（是否需人审），可选 title/detail",
+      },
+      {
+        title: "下发接口对接",
+        detail: "调用工作流派单 API 落库；失败需带错误回传与重试策略（可选人工兜底）",
+      },
+      { title: "简报草稿（可选）", detail: "draft_briefing 引用证据生成摘要" },
+    ],
+  },
+  {
+    name: "L5 执行闭环（工作流）",
+    desc: "审批、派单、SLA、回执校验",
+    nodes: [
+      { title: "风控门禁/人审", detail: "封控/停运/跨部门联动需审核，人工确认后派单" },
+      {
+        title: "派单与状态机",
+        detail:
+          "创建任务落库，通知渠道（消息/短信/APP），SLA 计时，超时升级，required_evidence 校验（缺证拒收或补传）",
+      },
+      { title: "回执校验", detail: "核对证据/状态，更新任务/事件时间线，异常回退或升级" },
+      { title: "证据库", detail: "照片/视频/定位等附件存储与引用 ID" },
+    ],
+  },
+  {
+    name: "L6 战报与追溯",
+    desc: "时间线/指标/依据可追溯",
+    nodes: [
+      { title: "时间线汇总", detail: "预警/模型/智能体/审批/派单/回执" },
+      { title: "指标与战报", detail: "任务完成率、响应时长等导出" },
+      { title: "血缘与审计", detail: "lineage/version_refs 支撑依据可追溯" },
+    ],
+  },
+];
 
 const areaId = ref("A-001");
 const incidentId = ref<string>("");
@@ -205,6 +295,10 @@ loadTopN().catch(() => {});
   border-radius: 12px;
   padding: 12px;
   background: #fff;
+  overflow: hidden;
+}
+.card.wide {
+  grid-column: 1 / -1;
 }
 .row {
   display: flex;
@@ -255,6 +349,54 @@ button.ghost {
 }
 .muted {
   color: #6b7280;
+}
+.layer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.layer-card {
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafafa;
+}
+.layer-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.layer-desc {
+  color: #6b7280;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.layer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.layer-list li {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.node-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.node-detail {
+  color: #6b7280;
+  font-size: 12px;
+}
+.hint {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 12px;
 }
 .box {
   border: 1px solid #f3f4f6;
