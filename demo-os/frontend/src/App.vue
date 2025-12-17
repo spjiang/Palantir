@@ -16,26 +16,35 @@
           <input v-model="areaId" />
           <button @click="loadTopN">刷新 TopN</button>
         </div>
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>对象</th>
-              <th>等级</th>
-              <th>分数</th>
-              <th>置信度</th>
-              <th>解释因子</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="it in topN" :key="it.target_id" @click="pickTarget(it.target_id)">
-              <td>{{ it.target_id }}</td>
-              <td>{{ it.risk_level }}</td>
-              <td>{{ it.risk_score.toFixed(2) }}</td>
-              <td>{{ it.confidence.toFixed(2) }}</td>
-              <td class="muted">{{ (it.explain_factors || []).slice(0, 3).join(" / ") }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="map-and-list">
+          <div class="map-card">
+            <div class="map-title">数字孪生 · 地图视图</div>
+            <div ref="mapRef" class="map"></div>
+            <div class="map-hint muted">示例坐标基于重庆城区，按风险色彩/大小呈现 TopN 点位；点击点位或列表联动。</div>
+          </div>
+          <div class="list-card">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>对象</th>
+                  <th>等级</th>
+                  <th>分数</th>
+                  <th>置信度</th>
+                  <th>解释因子</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="it in topN" :key="it.target_id" @click="pickTarget(it.target_id)" :class="{ active: it.target_id === selectedTarget }">
+                  <td>{{ it.target_id }}</td>
+                  <td>{{ it.risk_level }}</td>
+                  <td>{{ it.risk_score.toFixed(2) }}</td>
+                  <td>{{ it.confidence.toFixed(2) }}</td>
+                  <td class="muted">{{ (it.explain_factors || []).slice(0, 3).join(" / ") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div v-if="selectedTargetObj" class="twin">
           <div class="twin-header">
             <div class="twin-title">数字孪生视图 · {{ selectedTargetObj.target_id }}</div>
@@ -182,7 +191,9 @@
 
 <script setup lang="ts">
 import axios from "axios";
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 // 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -279,12 +290,29 @@ const selectedTargetObj = computed(() => {
   return found || topN.value[0];
 });
 
+// 演示：为 road-001..008 生成重庆周边的示例坐标
+const targetCoords: Record<string, [number, number]> = {
+  "road-001": [29.563, 106.551],
+  "road-002": [29.565, 106.56],
+  "road-003": [29.57, 106.54],
+  "road-004": [29.555, 106.57],
+  "road-005": [29.575, 106.565],
+  "road-006": [29.568, 106.548],
+  "road-007": [29.558, 106.535],
+  "road-008": [29.552, 106.558],
+};
+
+const mapRef = ref<HTMLDivElement | null>(null);
+let map: L.Map | null = null;
+let markers: Record<string, L.CircleMarker> = {};
+
 async function loadTopN() {
   const { data } = await axios.get(`${apiBase}/risk/topn`, { params: { area_id: areaId.value, n: 5 } });
   topN.value = data.items || [];
   if (!selectedTarget.value && topN.value.length > 0) {
     selectedTarget.value = topN.value[0].target_id || "";
   }
+  renderMap();
 }
 
 function pickTarget(targetId: string) {
@@ -364,6 +392,60 @@ async function loadReport() {
 }
 
 loadTopN().catch(() => {});
+
+function renderMap() {
+  if (!mapRef.value) return;
+  if (!map) {
+    map = L.map(mapRef.value, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      attributionControl: false,
+    }).setView([29.563, 106.551], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+  }
+
+  // 清理旧标记
+  Object.values(markers).forEach((m) => m.remove());
+  markers = {};
+
+  topN.value.forEach((item) => {
+    const coord = targetCoords[item.target_id];
+    if (!coord) return;
+    const color = item.risk_level === "红" ? "#f87171" : item.risk_level === "橙" ? "#fb923c" : "#4ade80";
+    const radius = Math.max(6, Math.min(14, item.risk_score)); // 用风险分控制大小
+    const marker = L.circleMarker(coord, {
+      color,
+      radius,
+      weight: item.target_id === selectedTarget.value ? 3 : 1.5,
+      fillOpacity: 0.55,
+    })
+      .addTo(map!)
+      .bindPopup(
+        `<strong>${item.target_id}</strong><br/>风险: ${item.risk_level}<br/>分数: ${item.risk_score.toFixed(
+          2,
+        )}<br/>置信度: ${item.confidence.toFixed(2)}<br/>解释: ${(item.explain_factors || []).slice(0, 3).join(" / ")}`
+      )
+      .on("click", () => {
+        pickTarget(item.target_id);
+      });
+    markers[item.target_id] = marker;
+  });
+
+  // 若有选中的点，则居中并高亮
+  if (selectedTarget.value && markers[selectedTarget.value]) {
+    markers[selectedTarget.value].openPopup();
+    map.setView(markers[selectedTarget.value].getLatLng(), 13, { animate: true });
+  }
+}
+
+watch(
+  () => selectedTarget.value,
+  () => {
+    renderMap();
+  }
+);
 </script>
 
 <style scoped>
@@ -416,6 +498,43 @@ loadTopN().catch(() => {});
 }
 .card.wide {
   grid-column: 1 / -1;
+}
+.map-and-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.map-card,
+.list-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.map-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.map {
+  width: 100%;
+  height: 280px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.map-hint {
+  margin-top: 6px;
+  font-size: 12px;
+}
+/* Leaflet 默认图标修正 */
+:global(.leaflet-container) {
+  background: #0c1220;
+}
+:global(.leaflet-popup-content) {
+  color: #0c1220;
+}
+.list-card table tr.active {
+  background: rgba(79, 139, 255, 0.12);
 }
 .twin {
   margin-top: 10px;
