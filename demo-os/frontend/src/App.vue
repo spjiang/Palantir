@@ -36,6 +36,40 @@
             </tr>
           </tbody>
         </table>
+        <div v-if="selectedTargetObj" class="twin">
+          <div class="twin-header">
+            <div class="twin-title">数字孪生视图 · {{ selectedTargetObj.target_id }}</div>
+            <div class="twin-meta">风险 {{ selectedTargetObj.risk_level }} · 置信度 {{ selectedTargetObj.confidence.toFixed(2) }}</div>
+          </div>
+          <div class="twin-body">
+            <div class="twin-tiles">
+              <div class="tile big">
+                <div class="tile-top">risk_score</div>
+                <div class="tile-num">{{ selectedTargetObj.risk_score.toFixed(2) }}</div>
+                <div class="tile-bar">
+                  <div class="tile-bar-fill" :style="{ width: Math.min(selectedTargetObj.risk_score * 10, 100) + '%' }"></div>
+                </div>
+              </div>
+              <div class="tile">
+                <div class="tile-top">confidence</div>
+                <div class="tile-num small">{{ selectedTargetObj.confidence.toFixed(2) }}</div>
+              </div>
+              <div class="tile">
+                <div class="tile-top">风险等级</div>
+                <div class="badge">{{ selectedTargetObj.risk_level }}</div>
+              </div>
+            </div>
+            <div class="twin-factors">
+              <div class="twin-subtitle">解释因子</div>
+              <div class="factor-chips">
+                <span v-for="(f, idx) in (selectedTargetObj.explain_factors || []).slice(0, 6)" :key="idx" class="chip">
+                  {{ f }}
+                </span>
+                <span v-if="!selectedTargetObj.explain_factors || selectedTargetObj.explain_factors.length === 0" class="chip muted">暂无</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="card wide">
@@ -148,7 +182,7 @@
 
 <script setup lang="ts">
 import axios from "axios";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 // 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -238,6 +272,12 @@ const chatInput = ref("请研判并一键下发任务包");
 const agentOut = ref("");
 const reportOut = ref("");
 const reportData = ref<any | null>(null);
+
+const selectedTargetObj = computed(() => {
+  if (!topN.value || topN.value.length === 0) return null;
+  const found = topN.value.find((it) => it.target_id === selectedTarget.value);
+  return found || topN.value[0];
+});
 
 async function loadTopN() {
   const { data } = await axios.get(`${apiBase}/risk/topn`, { params: { area_id: areaId.value, n: 5 } });
@@ -376,6 +416,91 @@ loadTopN().catch(() => {});
 }
 .card.wide {
   grid-column: 1 / -1;
+}
+.twin {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(79, 139, 255, 0.08), rgba(61, 214, 208, 0.05));
+}
+.twin-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.twin-title {
+  font-weight: 700;
+}
+.twin-meta {
+  color: #9fb2d4;
+  font-size: 12px;
+}
+.twin-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.twin-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.tile {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.tile.big {
+  grid-column: span 2;
+}
+.tile-top {
+  color: #9fb2d4;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.tile-num {
+  font-size: 20px;
+  font-weight: 800;
+}
+.tile-num.small {
+  font-size: 16px;
+}
+.tile-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.tile-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4f8bff, #3dd6d0);
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.twin-factors {
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.twin-subtitle {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.factor-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .row {
   display: flex;
