@@ -224,6 +224,9 @@ async function sendChat() {
     area_id: areaId.value,
     message: chatInput.value,
   });
+  if (data.incident_id) {
+    incidentId.value = data.incident_id;
+  }
   agentOut.value = JSON.stringify(data, null, 2);
   // 若智能体自动创建了事件
   if (!incidentId.value) {

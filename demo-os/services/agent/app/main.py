@@ -27,6 +27,7 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    incident_id: str | None = None
     summary: str
     recommendations: list[dict[str, Any]] = Field(default_factory=list)
     tasks: list[dict[str, Any]] = Field(default_factory=list)
@@ -114,6 +115,7 @@ def _rule_based_plan(topn: dict, incident_id: str) -> ChatResponse:
     ]
 
     return ChatResponse(
+        incident_id=incident_id,
         summary=f"建议优先关注 {target_id}（风险{risk_level}），原因：{'; '.join(explain[:3])}",
         recommendations=[
             {"action": "优先处置", "target_id": target_id, "risk_level": risk_level, "reason": explain[:3], "preconditions": ["人审确认"] if need_approval else []}
