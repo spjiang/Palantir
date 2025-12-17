@@ -23,11 +23,13 @@ app = FastAPI(title="Flood Demo Agent Service", version="0.1.0")
 class ChatRequest(BaseModel):
     incident_id: str | None = None
     area_id: str = "A-001"
+    target_id: str | None = None
     message: str
 
 
 class ChatResponse(BaseModel):
     incident_id: str | None = None
+    target_id: str | None = None
     summary: str
     recommendations: list[dict[str, Any]] = Field(default_factory=list)
     tasks: list[dict[str, Any]] = Field(default_factory=list)
@@ -81,14 +83,23 @@ async def trigger_workflow(incident_id: str, task_pack: dict) -> dict:
     return data
 
 
-def _rule_based_plan(topn: dict, incident_id: str) -> ChatResponse:
+def _rule_based_plan(topn: dict, incident_id: str, target_id: str | None) -> ChatResponse:
     items = topn.get("items", [])
     if not items:
-        return ChatResponse(summary="当前无风险对象。")
-    top = items[0]
-    risk_level = top.get("risk_level")
-    target_id = top.get("target_id")
-    explain = top.get("explain_factors", [])
+        return ChatResponse(summary="当前无风险对象。", incident_id=incident_id, target_id=None)
+
+    # 若用户指定了 target_id，则优先选中；否则选 TopN 第一条
+    chosen = None
+    if target_id:
+        for it in items:
+            if it.get("target_id") == target_id:
+                chosen = it
+                break
+    if chosen is None:
+        chosen = items[0]
+    target_id = chosen.get("target_id")
+    risk_level = chosen.get("risk_level")
+    explain = chosen.get("explain_factors", [])
 
     need_approval = True if risk_level in ("红", "橙") else False
     tasks = [
@@ -116,12 +127,13 @@ def _rule_based_plan(topn: dict, incident_id: str) -> ChatResponse:
 
     return ChatResponse(
         incident_id=incident_id,
+        target_id=target_id,
         summary=f"建议优先关注 {target_id}（风险{risk_level}），原因：{'; '.join(explain[:3])}",
         recommendations=[
             {"action": "优先处置", "target_id": target_id, "risk_level": risk_level, "reason": explain[:3], "preconditions": ["人审确认"] if need_approval else []}
         ],
         tasks=tasks,
-        evidence=[{"type": "model", "ref": top.get("model_version"), "explain_factors": explain, "confidence": top.get("confidence")}],
+        evidence=[{"type": "model", "ref": chosen.get("model_version"), "explain_factors": explain, "confidence": chosen.get("confidence")}],
         risk_controls={"need_approval_actions": ["封控准备"] if need_approval else [], "missing_inputs": ["现场积水深度核验"]},
     )
 
@@ -167,7 +179,7 @@ async def chat(req: ChatRequest):
         incident_id = inc["incident_id"]
 
     topn = await query_risk_topn.ainvoke({"area_id": req.area_id, "n": 5})
-    base = _rule_based_plan(topn, incident_id)
+    base = _rule_based_plan(topn, incident_id, req.target_id)
 
     # 可选：用 DeepSeek 生成更自然的 summary（保持结构化不变）
     if DEEPSEEK_API_KEY:

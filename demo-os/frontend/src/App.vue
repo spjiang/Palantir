@@ -195,6 +195,7 @@ const layerBlocks = [
 
 const areaId = ref("A-001");
 const incidentId = ref<string>("");
+const selectedTarget = ref<string>("");
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -206,9 +207,13 @@ const reportOut = ref("");
 async function loadTopN() {
   const { data } = await axios.get(`${apiBase}/risk/topn`, { params: { area_id: areaId.value, n: 5 } });
   topN.value = data.items || [];
+  if (!selectedTarget.value && topN.value.length > 0) {
+    selectedTarget.value = topN.value[0].target_id || "";
+  }
 }
 
 function pickTarget(targetId: string) {
+  selectedTarget.value = targetId;
   chatInput.value = `请研判 ${targetId} 并给出任务包建议`;
 }
 
@@ -222,6 +227,7 @@ async function sendChat() {
   const { data } = await axios.post(`${agentBase}/agent/chat`, {
     incident_id: incidentId.value || null,
     area_id: areaId.value,
+    target_id: selectedTarget.value || null,
     message: chatInput.value,
   });
   if (data.incident_id) {
