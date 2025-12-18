@@ -1462,6 +1462,219 @@
           </div>
         </div>
       </div>
+      
+      <div class="agent-data-detail">
+        <div class="detail-title">L4 智能体决策：数据输入与输出详解</div>
+        
+        <div class="detail-section">
+          <div class="detail-subtitle">1. 研判输入数据（从 L3 风险推理层传入）</div>
+          <div class="detail-content">
+            <div class="data-structure">
+              <div class="struct-label">TopN 风险数据（JSON 数组）</div>
+              <pre class="code-block">[
+  {
+    "target_id": "a-001-road-001",      // 目标对象ID
+    "area_id": "A-001",                 // 区域ID
+    "risk_score": 8.5,                  // 风险分数（0-10）
+    "risk_level": "红",                 // 风险等级（红/橙/黄/绿）
+    "confidence": 0.85,                 // 置信度（0-1）
+    "explain_factors": [                // 解释因子数组
+      "雨强上升",
+      "水位超限",
+      "历史事件"
+    ],
+    "object_type": "road_segment",      // 对象类型
+    "features": {                        // 特征数据
+      "rain_now_mmph": 63,              // 当前雨强（mm/h）
+      "rain_1h_mm": 120,                // 1小时累计雨量（mm）
+      "water_level_mm": 450             // 水位（mm）
+    },
+    "attrs": {                           // 对象属性
+      "name": "路段1",
+      "admin_area": "江北新区",
+      "location": "106.5,29.5"
+    }
+  },
+  // ... 更多风险点位（TopN，通常取 Top 5-12）
+]</pre>
+            </div>
+          </div>
+        </div>
+        
+        <div class="detail-section">
+          <div class="detail-subtitle">2. 传入大模型的数据结构（LLM Prompt）</div>
+          <div class="detail-content">
+            <div class="data-structure">
+              <div class="struct-label">系统提示词（System Prompt）+ 用户消息（User Message）+ RAG 检索结果</div>
+              <pre class="code-block">// System Prompt（系统角色设定）
+{
+  "role": "system",
+  "content": "你是暴雨参谋长智能体，负责分析风险数据并生成任务包。
+你的职责：
+1. 分析 TopN 风险点位数据
+2. 检索相关预案/规程/历史战报（RAG）
+3. 生成结构化任务包（TaskPack）
+4. 推理责任单位（owner_org）
+5. 计算合理的 SLA 时限
+..."
+}
+
+// User Message（用户请求 + TopN 数据）
+{
+  "role": "user",
+  "content": "请研判以下风险点位并给出任务包建议：
+
+风险点位数据：
+[
+  {
+    "target_id": "a-001-road-001",
+    "risk_score": 8.5,
+    "risk_level": "红",
+    "confidence": 0.85,
+    "explain_factors": ["雨强上升", "水位超限"],
+    "features": {
+      "rain_now_mmph": 63,
+      "rain_1h_mm": 120,
+      "water_level_mm": 450
+    },
+    "attrs": {
+      "name": "路段1",
+      "admin_area": "江北新区"
+    }
+  }
+]
+
+请基于以上数据和相关预案，生成任务包。"
+}
+
+// RAG 检索结果（检索增强生成）
+{
+  "rag_results": [
+    {
+      "source": "应急预案-封控流程",
+      "content": "当路段水位超过 400mm 且雨强超过 60mm/h 时，应启动封控预案...",
+      "relevance_score": 0.92
+    },
+    {
+      "source": "历史战报-2024-07-15",
+      "content": "类似情况曾发生在江北新区路段1，当时采取的措施包括：1. 封控准备 2. 泵站启动...",
+      "relevance_score": 0.88
+    }
+  ]
+}</pre>
+            </div>
+            <div class="data-note">
+              <strong>说明：</strong>大模型接收的数据包括：① 系统提示词（角色设定、任务说明、输出格式要求）② 用户消息（包含 TopN 风险数据）③ RAG 检索结果（相关预案/规程/历史战报）。总 Token 数约 2000-5000 tokens。
+            </div>
+          </div>
+        </div>
+        
+        <div class="detail-section">
+          <div class="detail-subtitle">3. 任务包下发输出数据（TaskPack JSON）</div>
+          <div class="detail-content">
+            <div class="data-structure">
+              <div class="struct-label">任务包结构（Function Calling 结构化输出）</div>
+              <pre class="code-block">{
+  "incident_id": "inc-1766020476806",    // 事件ID（自动生成）
+  "title": "江北新区 暴雨内涝处置事件",   // 事件标题
+  "created_at": "2025-12-18T01:14:36Z", // 创建时间
+  "status": "pending",                   // 状态（pending/processing/completed）
+  
+  "tasks": [                             // 任务列表
+    {
+      "task_id": "task-001",              // 任务ID
+      "task_type": "封控准备",            // 任务类型
+      "target_object_id": "a-001-road-001", // 目标对象ID
+      "description": "对路段1进行封控准备，设置警示标志，疏导交通", // 任务描述
+      
+      "owner_org": "交警",                // 责任单位（智能体推理得出）
+      "sla_minutes": 20,                  // SLA 时限（分钟，智能体计算）
+      
+      "required_evidence": [              // 必传证据
+        "定位",
+        "照片",
+        "视频"
+      ],
+      
+      "need_approval": true,              // 需审批（高风险任务）
+      "approval_flow": "高风险任务审批",  // 审批流程名称
+      
+      "priority": "high",                 // 优先级（high/medium/low）
+      "estimated_duration": 15            // 预估时长（分钟）
+    },
+    {
+      "task_id": "task-002",
+      "task_type": "泵站启动",
+      "target_object_id": "pump-station-001",
+      "description": "启动关联泵站，加速排水",
+      "owner_org": "区排水",
+      "sla_minutes": 15,
+      "required_evidence": ["定位", "运行状态"],
+      "need_approval": false,
+      "priority": "high",
+      "estimated_duration": 10
+    }
+    // ... 更多任务
+  ],
+  
+  "metadata": {                          // 元数据
+    "rag_sources": [                     // RAG 引用来源
+      "应急预案-封控流程",
+      "历史战报-2024-07-15"
+    ],
+    "reasoning": "基于风险等级'红'、雨强63mm/h、水位450mm，参考历史战报，生成封控和泵站启动任务", // 推理过程
+    "confidence": 0.88                    // 任务包置信度
+  }
+}</pre>
+            </div>
+            <div class="data-note">
+              <strong>说明：</strong>任务包通过 Function Calling 结构化输出，确保格式规范。包含：① 事件基本信息 ② 任务列表（每个任务包含类型、目标、责任单位、SLA、证据要求、审批标志）③ 元数据（RAG 来源、推理过程、置信度）。输出 Token 数约 500-2000 tokens。
+            </div>
+          </div>
+        </div>
+        
+        <div class="detail-section">
+          <div class="detail-subtitle">4. 数据流转过程</div>
+          <div class="detail-content">
+            <div class="process-flow">
+              <div class="process-step">
+                <div class="step-num">①</div>
+                <div class="step-text">L3 风险推理层输出 TopN 风险数据（risk_score、risk_level、confidence、explain_factors）</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">②</div>
+                <div class="step-text">L4 智能体接收 TopN 数据，用户发起研判请求（如"请研判 road-001 并给出任务包建议"）</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">③</div>
+                <div class="step-text">L4 RAG 检索：基于风险数据检索相关预案/规程/历史战报（向量检索 Top5，重排序 Top3）</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">④</div>
+                <div class="step-text">L4 构建 LLM Prompt：系统提示词 + 用户消息（含 TopN 数据） + RAG 检索结果</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">⑤</div>
+                <div class="step-text">L4 调用 LLM（Function Calling）：输入 Prompt，输出结构化 TaskPack JSON</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">⑥</div>
+                <div class="step-text">L4 输出 TaskPack：包含 tasks[]、owner_org、SLA、required_evidence、need_approval</div>
+              </div>
+              <div class="process-arrow">↓</div>
+              <div class="process-step">
+                <div class="step-num">⑦</div>
+                <div class="step-text">L5 工作流层接收 TaskPack，解析任务列表，启动任务分派和状态跟踪</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div class="summary-field-help">
@@ -3120,6 +3333,117 @@ watch(
   font-size: 16px;
   color: #60a5fa;
   font-weight: bold;
+}
+
+.agent-data-detail {
+  margin-top: 32px;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  border-radius: 12px;
+}
+.detail-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #a78bfa;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(147, 51, 234, 0.3);
+  text-align: center;
+}
+.detail-section {
+  margin-bottom: 32px;
+}
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+.detail-subtitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #c4b5fd;
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 3px solid rgba(147, 51, 234, 0.5);
+}
+.detail-content {
+  padding-left: 20px;
+}
+.data-structure {
+  margin-bottom: 16px;
+}
+.struct-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 8px;
+}
+.code-block {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #60a5fa;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.data-note {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
+  border-radius: 4px;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.data-note strong {
+  color: #93c5fd;
+}
+.process-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+}
+.process-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(147, 51, 234, 0.1);
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  border-radius: 6px;
+}
+.process-step .step-num {
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #9333ea, #7c3aed);
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.process-step .step-text {
+  flex: 1;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.process-arrow {
+  text-align: center;
+  font-size: 20px;
+  color: rgba(147, 51, 234, 0.6);
+  margin: 4px 0;
 }
 
 .summary-field-help {
