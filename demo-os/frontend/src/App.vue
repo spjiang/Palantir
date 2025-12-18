@@ -103,6 +103,18 @@
                 </span>
                 <span v-if="!selectedTargetObj.explain_factors || selectedTargetObj.explain_factors.length === 0" class="chip muted">暂无</span>
               </div>
+              <div class="factor-help">
+                <div class="help-title">因子说明</div>
+                <div class="help-grid">
+                  <div><strong>水位</strong><span>水位偏高或快速上升</span></div>
+                  <div><strong>雨强</strong><span>短时降雨强度大</span></div>
+                  <div><strong>累计雨量</strong><span>累积降水带来排水压力</span></div>
+                  <div><strong>泵站故障</strong><span>泵站离线/故障导致排水能力下降</span></div>
+                  <div><strong>道路拥堵</strong><span>交通指数高，影响疏散/处置</span></div>
+                  <div><strong>低洼/排水弱</strong><span>地形低洼或排水能力不足</span></div>
+                  <div><strong>风险分=xx</strong><span>模型输出的风险得分</span></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -744,6 +756,29 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.factor-help {
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+.help-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+  font-size: 12px;
+}
+.help-grid strong {
+  display: inline-block;
+  min-width: 68px;
+  color: #e5ecff;
+}
+.help-grid span {
+  color: #9fb2d4;
 }
 .summary-tiles {
   margin-top: 12px;
