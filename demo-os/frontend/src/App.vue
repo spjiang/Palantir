@@ -506,12 +506,12 @@ function renderMap() {
     const coord = getCoord(item.target_id, item.area_id);
     const color =
       item.risk_level === "红"
-        ? "#f87171"
+        ? "#dc2626" // 红
         : item.risk_level === "橙"
-          ? "#fb923c"
+          ? "#ea580c" // 橙
           : item.risk_level === "黄"
-            ? "#eab308"
-            : "#4ade80";
+            ? "#ca8a04" // 黄
+            : "#15803d"; // 深绿
     const radius = Math.max(6, Math.min(14, item.risk_score)); // 用风险分控制大小
     const marker = L.circleMarker(coord, {
       color,
@@ -749,20 +749,20 @@ watch(
   gap: 6px;
 }
 .level-chip.red {
-  background: rgba(248, 113, 113, 0.16);
-  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(220, 38, 38, 0.24);
+  border-color: rgba(220, 38, 38, 0.6);
 }
 .level-chip.orange {
-  background: rgba(251, 146, 60, 0.16);
-  border-color: rgba(251, 146, 60, 0.5);
+  background: rgba(234, 88, 12, 0.24);
+  border-color: rgba(234, 88, 12, 0.6);
 }
 .level-chip.yellow {
-  background: rgba(234, 179, 8, 0.16);
-  border-color: rgba(234, 179, 8, 0.5);
+  background: rgba(202, 138, 4, 0.24);
+  border-color: rgba(202, 138, 4, 0.6);
 }
 .level-chip.green {
-  background: rgba(74, 222, 128, 0.16);
-  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(21, 128, 61, 0.24);
+  border-color: rgba(21, 128, 61, 0.6);
 }
 .row {
   display: flex;
@@ -833,16 +833,16 @@ button:hover {
   cursor: pointer;
 }
 .tbl tbody tr.level-红 {
-  background: rgba(248, 113, 113, 0.16);
+  background: rgba(185, 28, 28, 0.32);
 }
 .tbl tbody tr.level-橙 {
-  background: rgba(251, 146, 60, 0.16);
+  background: rgba(194, 65, 12, 0.32);
 }
 .tbl tbody tr.level-黄 {
-  background: rgba(234, 179, 8, 0.16);
+  background: rgba(161, 98, 7, 0.32);
 }
 .tbl tbody tr.level-绿 {
-  background: rgba(74, 222, 128, 0.16);
+  background: rgba(21, 128, 61, 0.32);
 }
 .muted {
   color: #9fb2d4;
