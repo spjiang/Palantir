@@ -6,9 +6,13 @@
         <span>API: {{ apiBase }}</span>
         <span>智能体: {{ agentBase }}</span>
       </div>
+      <div class="meta tabs">
+        <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
+        <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'">本体/语义选型</button>
+      </div>
     </header>
 
-    <main class="grid">
+<main class="grid" v-if="activePage === 'main'">
       <section class="card wide">
         <h3>1) 风险热力图（简化为 TopN 列表）</h3>
         <div class="row">
@@ -225,6 +229,39 @@
         </div>
       </section>
     </main>
+
+<main v-else class="grid single">
+  <section class="card wide">
+    <h3>本体与语义平台选型（新页面）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示语义/本体层的技术方案示意。</p>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">图数据库 / 知识图谱</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>Neo4j</strong><span>关系/路径查询、可视化</span></div>
+          <div class="stack-item"><strong>JanusGraph</strong><span>分布式大图，后端可配 Cassandra/HBase</span></div>
+          <div class="stack-item"><strong>TigerGraph</strong><span>高性能 OLTP/OLAP 图查询</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">RDF / 三元组</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>Apache Jena / Fuseki</strong><span>SPARQL / RDF 标准语义建模</span></div>
+          <div class="stack-item"><strong>GraphDB</strong><span>企业级 RDF 存储与推理</span></div>
+          <div class="stack-item"><strong>SPARQL 端点</strong><span>标准查询接口 + 本体约束校验</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">关系型 + 缓存</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>PostgreSQL / Timescale</strong><span>对象快照、时序特征、视图</span></div>
+          <div class="stack-item"><strong>Redis</strong><span>热点对象/状态缓存、地理索引</span></div>
+          <div class="stack-item"><strong>API 层</strong><span>对象状态查询 / 关系展开 / 版本追溯</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
   </div>
 </template>
 
@@ -319,6 +356,8 @@ const areaOptions = [
 ];
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
+
+const activePage = ref<"main" | "ontology">("main");
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -591,11 +630,25 @@ watch(
   color: #c5d1ff;
   font-size: 12px;
 }
+.tabs button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #d8e5ff;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+.tabs button.active {
+  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
+  color: #0c1220;
+}
 .grid {
   margin-top: 14px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+}
+.grid.single {
+  grid-template-columns: 1fr;
 }
 .card {
   border: 1px solid rgba(255, 255, 255, 0.08);
