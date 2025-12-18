@@ -1366,6 +1366,134 @@
     <h3>系统架构总结（L0-L6）</h3>
     <p class="muted">本页展示应急安全AI操作系统的完整架构层次（L0-L6），并从数据清单、语义建模、AI应用、飞轮效应、Token消耗等维度进行总结。</p>
     
+    <div class="summary-field-help">
+      <div class="field-help-title">系统字段说明</div>
+      
+      <div class="field-help-section">
+        <div class="section-title">风险评分相关字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">risk_score（风险分数）</div>
+            <div class="field-desc">数值范围 0-10，表示对象的综合风险评分。分数越高表示风险越大，通常 8-10 为高风险（红），6-8 为中高风险（橙），4-6 为中风险（黄），0-4 为低风险（绿）。由 L3 风险推理模型计算得出。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">risk_level（风险等级）</div>
+            <div class="field-desc">分为四个等级：<span class="level-chip red">红</span>（高风险）、<span class="level-chip orange">橙</span>（中高风险）、<span class="level-chip yellow">黄</span>（中风险）、<span class="level-chip green">绿</span>（低风险）。等级由 risk_score 映射而来，用于快速识别风险程度，便于决策和任务分派。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">confidence（置信度）</div>
+            <div class="field-desc">数值范围 0-1，表示模型对风险评分的置信程度。置信度越高表示模型对评分越有信心，通常基于特征完整性和模型不确定性计算。0.8 以上表示高置信度，0.6-0.8 表示中等置信度，0.6 以下表示低置信度。低置信度时建议人工复核。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">explain_factors（解释因子）</div>
+            <div class="field-desc">字符串数组，列出导致风险评分的主要因素。例如："雨强上升"、"水位超限"、"历史事件"等。这些因子通过 SHAP/LIME 等可解释性方法生成，帮助理解模型决策依据，便于人工验证和决策。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-help-section">
+        <div class="section-title">标识字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">incident_id（事件ID）</div>
+            <div class="field-desc">唯一标识一个应急事件的字符串，格式如 "inc-1766020476806"。用于关联该事件的所有时间线事件、任务包、状态变更等数据。一个事件可以包含多个任务包和多个时间线事件。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">target_id（目标对象ID）</div>
+            <div class="field-desc">风险评分的目标对象标识，格式如 "a-001-road-001"。通常由区域ID和对象类型+编号组成，用于唯一标识一个需要评估风险的对象（如路段、泵站等）。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">object_id（对象ID）</div>
+            <div class="field-desc">系统中对象的唯一标识，格式如 "a-002-road-001"。与 target_id 类似，但更通用，用于标识系统中的各种实体（路段、泵站、区域等）。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">area_id（区域ID）</div>
+            <div class="field-desc">地理区域的标识，格式如 "A-001"、"A-002"。用于按区域筛选和展示风险数据，一个区域可以包含多个对象（路段、泵站等）。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-help-section">
+        <div class="section-title">任务包相关字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">TaskPack（任务包）</div>
+            <div class="field-desc">由 L4 智能体决策层生成的结构化任务包对象，包含 tasks[]（任务列表）、owner_org（责任单位）、SLA（服务级别协议/时限）、required_evidence（必传证据）、need_approval（需审批标志）等字段。用于将风险研判结果转换为可执行的任务。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">tasks[]（任务列表）</div>
+            <div class="field-desc">任务包中包含的任务数组，每个任务包含 task_id、task_type（任务类型）、target_object_id（目标对象）、owner_org（责任单位）、status（状态）、SLA（时限）等字段。一个任务包可以包含多个任务。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">owner_org（责任单位）</div>
+            <div class="field-desc">负责执行任务的组织单位，如 "交警"、"区排水"、"消防"、"应急管理" 等。由 L4 智能体根据对象类型、风险等级、地理位置推理得出，用于任务分派。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">SLA（服务级别协议/时限）</div>
+            <div class="field-desc">任务完成的时间限制，单位为分钟，如 20、30、60。由 L4 智能体根据风险等级和任务类型计算得出。超过 SLA 时限未完成的任务会触发超时告警。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">required_evidence（必传证据）</div>
+            <div class="field-desc">完成任务必须提交的证据类型列表，如 ["定位", "照片", "视频", "签名"]。由 L4 智能体根据任务类型确定，L5 工作流层会校验证据完整性。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">need_approval（需审批）</div>
+            <div class="field-desc">布尔值，表示任务是否需要审批。高风险动作（如封控、停运、跨部门联动）通常需要审批。需要审批的任务在 L5 工作流层会触发审批流程。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-help-section">
+        <div class="section-title">事件和状态字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">TimelineEvent（时间线事件）</div>
+            <div class="field-desc">记录事件时间线的数据表，包含 id（事件ID）、incident_id（关联的事件ID）、type（事件类型）、payload（载荷数据）、created_at（创建时间）等字段。事件类型包括：incident_created（事件创建）、alert_event（告警事件）、task_completed（任务完成）、state_changed（状态变更）。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">ObjectState（对象状态）</div>
+            <div class="field-desc">对象状态的快照表，包含 object_id（对象ID）、object_type（对象类型）、area_id（区域ID）、attrs（属性JSON）、features（特征JSON）、dq_tags（数据质量标签JSON）、updated_at（更新时间）等字段。每次状态更新都会保留历史版本，用于状态追溯。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">attrs（属性）</div>
+            <div class="field-desc">对象的静态属性，以 JSON 格式存储，如 {"name": "路段1", "admin_area": "江北新区", "location": "..."}。包含对象的名称、位置、责任单位等基本信息。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">features（特征）</div>
+            <div class="field-desc">对象的动态特征数据，以 JSON 格式存储，如 {"rain_now_mmph": 63, "rain_1h_mm": 120, "water_level_mm": 450}。这些特征用于 L3 风险推理模型的输入，实时更新。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">payload（载荷）</div>
+            <div class="field-desc">时间线事件的详细数据，以 JSON 格式存储。不同事件类型的 payload 结构不同，如 incident_created 的 payload 包含 {"title": "事件标题"}，alert_event 的 payload 包含 {"level": "红", "reason": "雨强上升"}。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-help-section">
+        <div class="section-title">数据质量字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">dq_tags（数据质量标签）</div>
+            <div class="field-desc">数据质量标签，以 JSON 格式存储，如 {"freshness": 0.95, "validity": true, "completeness": 0.9, "accuracy": 0.85}。用于标识数据的质量状况，包括新鲜度（数据时效性）、有效性（数据是否有效）、完整性（数据是否完整）、准确性（数据是否准确）等维度。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-help-section">
+        <div class="section-title">时间戳字段</div>
+        <div class="field-help-grid">
+          <div class="field-help-item">
+            <div class="field-name">created_at（创建时间）</div>
+            <div class="field-desc">记录创建的时间戳，格式为 ISO 8601 标准时间（带时区），如 "2025-12-18T01:14:36.869407+00:00"。用于时间线排序、时间范围查询、事件间隔计算等。</div>
+          </div>
+          <div class="field-help-item">
+            <div class="field-name">updated_at（更新时间）</div>
+            <div class="field-desc">记录最后更新的时间戳，格式与 created_at 相同。用于状态快照的时间排序、状态变更检测、数据新鲜度计算等。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <div class="summary-arch">
       <div class="arch-layer">
         <div class="layer-header">
@@ -2765,6 +2893,85 @@ watch(
 }
 
 /* 总结页面样式 */
+.summary-field-help {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+.field-help-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+}
+.field-help-section {
+  margin-bottom: 24px;
+}
+.field-help-section:last-child {
+  margin-bottom: 0;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 12px;
+  padding-left: 8px;
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
+}
+.field-help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.field-help-item {
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+}
+.field-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 8px;
+}
+.field-desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #cbd5e1;
+}
+.field-desc .level-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 0 2px;
+}
+.field-desc .level-chip.red {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+.field-desc .level-chip.orange {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+  border: 1px solid rgba(249, 115, 22, 0.4);
+}
+.field-desc .level-chip.yellow {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+.field-desc .level-chip.green {
+  background: rgba(21, 128, 61, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(21, 128, 61, 0.4);
+}
 .summary-arch {
   display: flex;
   flex-direction: column;
