@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 from typing import Any
 
 import httpx
@@ -328,7 +329,14 @@ def seed_demo_data():
             inc = Incident(area_id=area_id, title=f"{admin_area} 暴雨内涝处置事件（演示）", status="open")
             s.add(inc)
             s.flush()
-            s.add(TimelineEvent(incident_id=inc.id, type="incident_created", payload={"title": inc.title}))
+            s.add(
+                TimelineEvent(
+                    id=f"tl-{uuid4().hex}",
+                    incident_id=inc.id,
+                    type="incident_created",
+                    payload={"title": inc.title},
+                )
+            )
             s.add(
                 AlertEvent(
                     incident_id=inc.id,
@@ -338,7 +346,14 @@ def seed_demo_data():
                     created_at=now - timedelta(minutes=5),
                 )
             )
-            s.add(TimelineEvent(incident_id=inc.id, type="alert_event", payload={"level": "红" if area_id == "A-002" else "橙", "reason": "雨强上升"}))
+            s.add(
+                TimelineEvent(
+                    id=f"tl-{uuid4().hex}",
+                    incident_id=inc.id,
+                    type="alert_event",
+                    payload={"level": "红" if area_id == "A-002" else "橙", "reason": "雨强上升"},
+                )
+            )
 
         s.commit()
 
