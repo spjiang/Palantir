@@ -260,6 +260,59 @@
         </div>
       </div>
     </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">对象 / 实体管理（演示表单）</div>
+        <div class="ont-form">
+          <input v-model="ontologyEntityId" placeholder="实体ID，如 road-segment" />
+          <input v-model="ontologyEntityLabel" placeholder="名称，如 路段" />
+          <select v-model="ontologyEntityType">
+            <option>实体</option>
+            <option>事件</option>
+            <option>设施</option>
+            <option>资源</option>
+          </select>
+          <textarea v-model="ontologyEntityAttrs" rows="2" placeholder="属性（逗号分隔）"></textarea>
+          <button @click="addOntologyEntity">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(e, idx) in ontologyEntities" :key="idx" class="ont-item">
+            <div><strong>{{ e.label }}</strong> <span class="muted">({{ e.id }})</span></div>
+            <div class="muted">类型：{{ e.type }}｜属性：{{ e.attrs }}</div>
+          </div>
+          <div v-if="ontologyEntities.length === 0" class="muted">尚未添加实体（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">关系管理（演示表单）</div>
+        <div class="ont-form">
+          <input v-model="ontologyRelFrom" placeholder="起点实体ID，如 road-segment" />
+          <input v-model="ontologyRelTo" placeholder="终点实体ID，如 pump-station" />
+          <input v-model="ontologyRelType" placeholder="关系类型，如 供排水关联" />
+          <textarea v-model="ontologyRelDesc" rows="2" placeholder="描述"></textarea>
+          <button @click="addOntologyRelation">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(r, idx) in ontologyRelations" :key="idx" class="ont-item">
+            <div><strong>{{ r.from }}</strong> → <strong>{{ r.to }}</strong> <span class="muted">({{ r.type }})</span></div>
+            <div class="muted">{{ r.desc }}</div>
+          </div>
+          <div v-if="ontologyRelations.length === 0" class="muted">尚未添加关系（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">查询 / 校验（示意）</div>
+        <div class="muted small">
+          - 图谱：Gremlin / Cypher / GSQL 查询<br />
+          - RDF：SPARQL 端点；SHACL/OWL 约束校验<br />
+          - 关系型：视图/存储过程/物化视图；Redis 缓存热点对象<br />
+          - 可接入：版本/血缘/审计接口
+        </div>
+      </div>
+    </div>
   </section>
 </main>
   </div>
@@ -358,6 +411,19 @@ const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
 const activePage = ref<"main" | "ontology">("main");
+
+// 本体管理演示（前端本地状态，不影响现有页面）
+const ontologyEntityId = ref("road-segment");
+const ontologyEntityLabel = ref("路段");
+const ontologyEntityType = ref("实体");
+const ontologyEntityAttrs = ref("名称, 位置, 责任单位, 设施类型");
+const ontologyEntities = ref<{ id: string; label: string; type: string; attrs: string }[]>([]);
+
+const ontologyRelFrom = ref("road-segment");
+const ontologyRelTo = ref("pump-station");
+const ontologyRelType = ref("供排水关联");
+const ontologyRelDesc = ref("路段关联附近泵站用于排涝");
+const ontologyRelations = ref<{ from: string; to: string; type: string; desc: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -476,6 +542,24 @@ function fillOneClick() {
   chatInput.value = selectedTarget.value
     ? `请研判 ${selectedTarget.value} 并一键下发任务包`
     : "请研判并一键下发任务包";
+}
+
+function addOntologyEntity() {
+  ontologyEntities.value.unshift({
+    id: ontologyEntityId.value.trim() || "entity-id",
+    label: ontologyEntityLabel.value.trim() || "未命名",
+    type: ontologyEntityType.value,
+    attrs: ontologyEntityAttrs.value.trim(),
+  });
+}
+
+function addOntologyRelation() {
+  ontologyRelations.value.unshift({
+    from: ontologyRelFrom.value.trim() || "A",
+    to: ontologyRelTo.value.trim() || "B",
+    type: ontologyRelType.value.trim() || "关系",
+    desc: ontologyRelDesc.value.trim(),
+  });
 }
 
 function formatTime(t: string | undefined) {
@@ -649,6 +733,60 @@ watch(
 }
 .grid.single {
   grid-template-columns: 1fr;
+}
+.ont-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.ont-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ont-title {
+  font-weight: 700;
+}
+.ont-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ont-form input,
+.ont-form select,
+.ont-form textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5ecff;
+}
+.ont-form button {
+  align-self: flex-start;
+}
+.ont-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ont-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.ont-item strong {
+  color: #e5ecff;
+}
+.small {
+  font-size: 12px;
 }
 .card {
   border: 1px solid rgba(255, 255, 255, 0.08);
