@@ -600,8 +600,9 @@ watch(
 .map-and-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .map-card,
 .list-card {
@@ -745,7 +746,7 @@ watch(
   gap: 6px;
 }
 .summary-tiles {
-  margin-top: 10px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
