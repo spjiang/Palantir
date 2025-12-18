@@ -14,6 +14,7 @@
         <button :class="{ active: activePage === 'agent' }" @click="activePage = 'agent'">L4 智能体决策</button>
         <button :class="{ active: activePage === 'workflow' }" @click="activePage = 'workflow'"> L5 执行闭环/工作流</button>
         <button :class="{ active: activePage === 'report' }" @click="activePage = 'report'">L6 战报与追溯</button>
+        <button :class="{ active: activePage === 'summary' }" @click="activePage = 'summary'">系统总结</button>
       </div>
     </header>
 
@@ -1343,6 +1344,528 @@
   </section>
 </main>
 
+<main v-else-if="activePage === 'summary'" class="grid single">
+  <section class="card wide">
+    <h3>系统架构总结（L0-L6）</h3>
+    <p class="muted">本页展示应急安全AI操作系统的完整架构层次（L0-L6），并从数据清单、语义建模、AI应用、飞轮效应、Token消耗等维度进行总结。</p>
+    
+    <div class="summary-arch">
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L0</span>
+          <span class="layer-title">界面层</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>TopN 风险数据</strong>：实时展示 Top 12 风险点位，包含 risk_score、risk_level、confidence、explain_factors</li>
+                <li><strong>事件数据</strong>：incident_id、事件标题、创建时间、状态</li>
+                <li><strong>任务包数据</strong>：TaskPack 结构（tasks[]、owner_org、SLA、required_evidence）</li>
+                <li><strong>战报数据</strong>：时间线事件、指标统计、状态追溯</li>
+                <li><strong>数据量</strong>：前端展示数据量约 1-5KB/请求，实时刷新频率 5-30 秒</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>对象关系可视化</strong>：风险点位与区域、路段与泵站的关联关系</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">区域(A-001) --包含--> 路段(road-001)
+路段(road-001) --关联--> 泵站(pump-001)
+路段(road-001) --触发--> 事件(incident-001)
+事件(incident-001) --生成--> 任务包(task-pack-001)</pre>
+                </li>
+                <li><strong>本体展示</strong>：实体类型（路段、泵站、事件、任务）、关系类型（包含、关联、触发、生成）</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>智能对话</strong>：暴雨参谋长智能体理解用户意图，解析风险研判请求</li>
+                <li><strong>任务包生成</strong>：基于风险数据自动生成结构化任务包（责任单位、SLA、证据要求）</li>
+                <li><strong>一键派单</strong>：将自然语言指令转换为系统可执行的任务包</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>用户反馈循环</strong>：用户使用智能体 → 系统记录对话数据 → 优化提示词 → 提升准确率</li>
+                <li><strong>数据积累</strong>：每次任务执行产生数据 → 丰富训练样本 → 提升模型效果</li>
+                <li><strong>知识沉淀</strong>：历史战报积累 → RAG 知识库扩充 → 智能体建议更准确</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>单次对话</strong>：约 500-2000 tokens（输入：风险数据 + 用户问题，输出：任务包 JSON）</li>
+                <li><strong>RAG 检索</strong>：检索 Top5 文档，约 1000-3000 tokens（上下文）</li>
+                <li><strong>日均消耗</strong>：假设 100 次对话/天，约 15-50 万 tokens/天</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L1</span>
+          <span class="layer-title">数据接入与治理（1.4 数据设计）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>Raw 层</strong>：原始传感器数据（雨量、雷达、水位、泵站、路况），数据量约 10-100 万条/天</li>
+                <li><strong>ODS 层</strong>：操作数据存储，清洗后的结构化数据，数据量约 5-50 万条/天</li>
+                <li><strong>TSDB 层</strong>：时序数据库（TimescaleDB），存储时间序列特征，数据量约 1000 万条/月</li>
+                <li><strong>数据源</strong>：雨量站、雷达站、水位站、泵站、路况传感器，总计约 50-200 个数据源</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>数据血缘</strong>：Raw → ODS → TSDB 的数据流转关系</li>
+                <li><strong>DQ 标签</strong>：数据质量标签（freshness、validity、completeness、accuracy）</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">数据源(雨量站-001) --采集--> Raw(rain_raw_001)
+Raw(rain_raw_001) --清洗--> ODS(rain_ods_001)
+ODS(rain_ods_001) --聚合--> TSDB(rain_tsdb_001)
+TSDB(rain_tsdb_001) --特征提取--> 特征(feature_001)</pre>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>数据质量检测</strong>：AI 识别异常数据、缺失值、异常值</li>
+                <li><strong>自动数据清洗</strong>：基于规则和模型的数据清洗策略</li>
+                <li><strong>特征工程</strong>：自动提取时间序列特征（滑动窗口、统计特征）</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>数据质量提升</strong>：AI 检测异常 → 人工修正 → 模型学习 → 检测更准确</li>
+                <li><strong>特征优化</strong>：特征使用反馈 → 优化特征工程 → 提升模型效果</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>数据质量检测</strong>：少量 Token（主要用于规则配置，非 LLM 调用）</li>
+                <li><strong>特征工程</strong>：无 Token 消耗（传统机器学习特征提取）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L2</span>
+          <span class="layer-title">语义与状态（1.3 本体 Ontology）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>实体数据</strong>：路段、泵站、区域、事件等实体，约 1000-5000 个实体</li>
+                <li><strong>关系数据</strong>：实体间关系（包含、关联、触发等），约 5000-20000 条关系</li>
+                <li><strong>属性数据</strong>：实体属性（名称、位置、责任单位等），约 10-50 个属性/实体</li>
+                <li><strong>状态快照</strong>：ObjectState 表，约 10 万条历史状态记录</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>知识图谱</strong>：Neo4j/JanusGraph/TigerGraph 存储实体和关系</li>
+                <li><strong>RDF 三元组</strong>：Apache Jena/Fuseki、GraphDB 存储标准语义模型</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">区域(江北新区) --包含--> 路段(road-001)
+路段(road-001) --关联--> 泵站(pump-station-001)
+路段(road-001) --位于--> 位置(坐标:106.5,29.5)
+路段(road-001) --责任单位--> 组织(区排水)
+路段(road-001) --触发--> 事件(incident-001)
+事件(incident-001) --风险等级--> 风险(红)
+风险(红) --置信度--> 置信度(0.85)</pre>
+                </li>
+                <li><strong>SPARQL 查询</strong>：标准语义查询，如查询"所有高风险路段及其关联泵站"</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>实体识别</strong>：从文本中提取实体（路段、泵站、事件）</li>
+                <li><strong>关系抽取</strong>：识别实体间关系（关联、包含、触发）</li>
+                <li><strong>语义理解</strong>：理解用户查询意图，转换为 SPARQL 查询</li>
+                <li><strong>知识补全</strong>：基于已有知识推理缺失关系</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>知识图谱扩充</strong>：AI 抽取实体关系 → 人工审核 → 图谱扩充 → 抽取更准确</li>
+                <li><strong>查询优化</strong>：用户查询 → AI 理解意图 → 优化查询 → 结果更精准</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>实体识别</strong>：单次约 200-500 tokens（输入文本，输出实体列表）</li>
+                <li><strong>关系抽取</strong>：单次约 300-800 tokens（输入实体对，输出关系）</li>
+                <li><strong>SPARQL 生成</strong>：单次约 500-1500 tokens（输入自然语言，输出 SPARQL）</li>
+                <li><strong>日均消耗</strong>：假设 50 次查询/天，约 5-15 万 tokens/天</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L3</span>
+          <span class="layer-title">风险推理（模型服务 1.9.3）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>特征数据</strong>：时间序列特征（rain_now_mmph、rain_1h_mm、water_level_mm 等），约 20-50 个特征/对象</li>
+                <li><strong>训练数据</strong>：历史风险事件标注数据，约 1-10 万条样本</li>
+                <li><strong>推理数据</strong>：实时特征数据，约 1000-5000 条/次推理</li>
+                <li><strong>模型输出</strong>：risk_score（0-10）、risk_level（红/橙/黄/绿）、confidence（0-1）、explain_factors</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>特征关系图</strong>：特征之间的相关性、重要性关系</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">对象(road-001) --特征--> 特征(rain_now_mmph: 63)
+对象(road-001) --特征--> 特征(water_level_mm: 450)
+特征(rain_now_mmph) --影响--> 风险(risk_score: 8.5)
+特征(water_level_mm) --影响--> 风险(risk_score: 8.5)
+风险(risk_score: 8.5) --等级--> 风险等级(红)
+风险(risk_score: 8.5) --置信度--> 置信度(0.85)
+风险(risk_score: 8.5) --解释因子--> 因子(雨强上升, 水位超限)</pre>
+                </li>
+                <li><strong>SHAP/LIME 解释</strong>：展示每个特征对风险评分的贡献度</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>风险评分</strong>：XGBoost/LightGBM/LSTM 模型预测风险评分</li>
+                <li><strong>风险等级分类</strong>：将风险评分映射为红/橙/黄/绿等级</li>
+                <li><strong>置信度计算</strong>：基于特征完整性和模型不确定性计算置信度</li>
+                <li><strong>解释因子生成</strong>：SHAP/LIME 解释模型决策，生成 explain_factors</li>
+                <li><strong>TopN 排序</strong>：按风险评分排序，返回 TopN 高风险对象</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>模型优化</strong>：预测结果 → 实际事件验证 → 模型重训练 → 预测更准确</li>
+                <li><strong>特征工程</strong>：模型解释 → 发现重要特征 → 特征优化 → 模型提升</li>
+                <li><strong>数据积累</strong>：每次事件产生标注数据 → 训练集扩充 → 模型效果提升</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>模型推理</strong>：无 Token 消耗（传统机器学习模型，非 LLM）</li>
+                <li><strong>解释生成</strong>：少量 Token（如用 LLM 生成自然语言解释，约 100-300 tokens/次）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L4</span>
+          <span class="layer-title">智能体决策（1.6/1.9.4）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>TopN 风险数据</strong>：输入 TopN 风险点位（含 risk_score/level/confidence/explain_factors）</li>
+                <li><strong>RAG 知识库</strong>：预案/规程/历史战报文档，约 100-1000 篇文档，向量化后约 10-100 万向量</li>
+                <li><strong>任务包数据</strong>：输出 TaskPack（tasks[]、owner_org、SLA、required_evidence、need_approval）</li>
+                <li><strong>对话历史</strong>：用户对话记录，约 1000-10000 条/月</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>任务包关系图</strong>：任务包与风险对象、责任单位的关联</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">风险对象(road-001) --触发--> 智能体决策
+智能体决策 --检索--> RAG知识库(预案-001)
+RAG知识库(预案-001) --引用--> 知识片段(封控流程)
+智能体决策 --生成--> 任务包(task-pack-001)
+任务包(task-pack-001) --包含--> 任务(task-001: 封控准备)
+任务(task-001) --责任单位--> 组织(交警)
+任务(task-001) --SLA--> 时限(20分钟)</pre>
+                </li>
+                <li><strong>RAG 检索链路</strong>：用户问题 → 向量检索 → 文档片段 → 引用标注</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>意图理解</strong>：理解用户自然语言请求（如"请研判 road-006 并给出任务包建议"）</li>
+                <li><strong>RAG 检索</strong>：向量检索相关预案/规程/历史战报，形成"有依据的建议"</li>
+                <li><strong>任务包编排</strong>：基于风险数据和 RAG 检索结果，生成结构化任务包</li>
+                <li><strong>责任归属推理</strong>：根据对象类型、风险等级、地理位置推理责任单位</li>
+                <li><strong>SLA 计算</strong>：根据风险等级、任务类型计算合理的 SLA 时限</li>
+                <li><strong>结构化输出</strong>：Function Calling 生成标准 JSON 格式任务包</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>知识库扩充</strong>：每次任务执行产生战报 → 知识库扩充 → RAG 检索更准确 → 任务包质量提升</li>
+                <li><strong>提示词优化</strong>：任务包执行反馈 → 优化提示词 → 生成更准确 → 执行成功率提升</li>
+                <li><strong>责任归属优化</strong>：任务执行结果 → 验证责任单位正确性 → 优化推理规则 → 准确率提升</li>
+                <li><strong>对话能力提升</strong>：用户对话数据 → 微调模型 → 理解更准确 → 用户体验提升</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>单次对话</strong>：约 2000-5000 tokens（输入：TopN 数据 + RAG 检索结果 + 用户问题，输出：任务包 JSON）</li>
+                <li><strong>RAG 检索</strong>：检索 Top5 文档，约 2000-5000 tokens（上下文）</li>
+                <li><strong>工具调用</strong>：Function Calling 约 500-1000 tokens（函数定义 + 参数）</li>
+                <li><strong>日均消耗</strong>：假设 100 次对话/天，约 45-110 万 tokens/天</li>
+                <li><strong>月均消耗</strong>：约 1350-3300 万 tokens/月</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L5</span>
+          <span class="layer-title">执行闭环（工作流 1.7/1.9.5）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>任务包数据</strong>：接收的 TaskPack，约 100-1000 个/天</li>
+                <li><strong>任务数据</strong>：任务列表（tasks[]），约 500-5000 个任务/天</li>
+                <li><strong>状态数据</strong>：任务状态（待处理/进行中/待审核/已完成），状态变更记录约 2000-20000 条/天</li>
+                <li><strong>证据数据</strong>：上传的附件（定位/照片/视频/签名），约 1000-10000 个文件/天</li>
+                <li><strong>审批数据</strong>：审批记录，约 100-1000 条/天</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>工作流关系图</strong>：任务包 → 任务 → 状态 → 审批 → 完成</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">任务包(task-pack-001) --包含--> 任务(task-001)
+任务(task-001) --分派--> 责任单位(交警)
+任务(task-001) --状态流转--> 状态(待处理 → 进行中 → 已完成)
+任务(task-001) --收集--> 证据(定位, 照片)
+任务(task-001) --触发--> 审批(approval-001)
+审批(approval-001) --审批人--> 人员(部门主管)
+审批(approval-001) --结果--> 状态(已通过)</pre>
+                </li>
+                <li><strong>状态机模型</strong>：任务状态流转图（待处理 → 进行中 → 待审核 → 已完成）</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>智能分派</strong>：根据任务类型、地理位置、负载均衡智能分派任务</li>
+                <li><strong>超时预测</strong>：基于历史数据预测任务可能超时，提前告警</li>
+                <li><strong>证据校验</strong>：AI 识别证据完整性、格式正确性</li>
+                <li><strong>审批路由</strong>：根据任务风险等级、金额等智能路由审批流程</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>分派优化</strong>：任务执行结果 → 验证分派合理性 → 优化分派策略 → 效率提升</li>
+                <li><strong>超时预测优化</strong>：实际超时数据 → 训练预测模型 → 预测更准确 → 提前干预</li>
+                <li><strong>流程优化</strong>：流程执行数据 → 识别瓶颈 → 优化流程 → 效率提升</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>智能分派</strong>：少量 Token（如用 LLM 推理分派策略，约 500-1000 tokens/次）</li>
+                <li><strong>证据校验</strong>：图像识别无 Token（CV 模型），文本校验约 200-500 tokens/次</li>
+                <li><strong>日均消耗</strong>：假设 1000 个任务/天，约 7-15 万 tokens/天</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-header">
+          <span class="layer-label">L6</span>
+          <span class="layer-title">战报与追溯（1.9.6/1.4.6）</span>
+        </div>
+        <div class="layer-content">
+          <div class="summary-dimension">
+            <div class="dim-title">1. 数据清单、数据量</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>TimelineEvent</strong>：事件时间线记录，约 10000-100000 条/月</li>
+                <li><strong>ObjectState</strong>：对象状态快照，约 100000-1000000 条/月</li>
+                <li><strong>指标数据</strong>：任务完成率、SLA 达成率、响应时间、处置时长，实时计算</li>
+                <li><strong>报告数据</strong>：生成的战报（JSON/HTML/PDF），约 100-1000 份/月</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">2. 语义建模的实现、展现</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>时间线关系图</strong>：事件时间线、状态变更链</li>
+                <li><strong>知识图谱示例</strong>：
+                  <pre class="graph-example">事件(incident-001) --时间线--> TimelineEvent(tl-001: 事件创建)
+TimelineEvent(tl-001) --触发--> TimelineEvent(tl-002: 告警)
+TimelineEvent(tl-002) --关联--> 对象(road-001)
+对象(road-001) --状态变更--> ObjectState(state-001: 风险等级 黄→红)
+ObjectState(state-001) --触发事件--> TimelineEvent(tl-003: 状态变更)
+TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
+任务包(task-pack-001) --完成--> TimelineEvent(tl-004: 任务完成)</pre>
+                </li>
+                <li><strong>状态追溯链</strong>：对象状态变更的完整链路（时间点、变更前状态、变更后状态、触发事件）</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">3. AI/大模型具体解决的哪些事儿</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>事件聚合</strong>：智能识别相关事件，按 incident_id 聚合</li>
+                <li><strong>时间线生成</strong>：AI 识别关键里程碑，生成时间线视图</li>
+                <li><strong>报告生成</strong>：基于模板和数据结构，生成结构化战报（JSON/HTML/PDF）</li>
+                <li><strong>自然语言总结</strong>：LLM 生成事件摘要、处置总结</li>
+                <li><strong>智能检索</strong>：基于自然语言的战报检索、事件追溯</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">4. AI带来的飞轮效应</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>报告质量提升</strong>：用户反馈 → 优化报告模板 → 报告更清晰 → 用户满意度提升</li>
+                <li><strong>知识沉淀</strong>：历史战报积累 → 知识库扩充 → RAG 检索更准确 → 智能体建议更准确</li>
+                <li><strong>追溯能力提升</strong>：追溯查询数据 → 优化索引 → 查询更快 → 用户体验提升</li>
+              </ul>
+            </div>
+          </div>
+          <div class="summary-dimension">
+            <div class="dim-title">5. Token的消耗</div>
+            <div class="dim-content">
+              <ul>
+                <li><strong>报告生成</strong>：单次约 1000-3000 tokens（输入：事件数据 + 时间线 + 指标，输出：报告文本）</li>
+                <li><strong>自然语言总结</strong>：单次约 500-2000 tokens（输入：事件数据，输出：摘要）</li>
+                <li><strong>智能检索</strong>：单次约 500-1500 tokens（输入：自然语言查询，输出：检索结果）</li>
+                <li><strong>日均消耗</strong>：假设 100 次报告生成/天，约 20-65 万 tokens/天</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary-total">
+      <h4>系统总体 Token 消耗估算</h4>
+      <div class="total-content">
+        <div class="total-item">
+          <strong>L0 界面层</strong>：约 15-50 万 tokens/天
+        </div>
+        <div class="total-item">
+          <strong>L1 数据接入与治理</strong>：约 0-1 万 tokens/天（少量）
+        </div>
+        <div class="total-item">
+          <strong>L2 语义与状态</strong>：约 5-15 万 tokens/天
+        </div>
+        <div class="total-item">
+          <strong>L3 风险推理</strong>：约 0-1 万 tokens/天（少量）
+        </div>
+        <div class="total-item">
+          <strong>L4 智能体决策</strong>：约 45-110 万 tokens/天（主要消耗）
+        </div>
+        <div class="total-item">
+          <strong>L5 执行闭环</strong>：约 7-15 万 tokens/天
+        </div>
+        <div class="total-item">
+          <strong>L6 战报与追溯</strong>：约 20-65 万 tokens/天
+        </div>
+        <div class="total-summary">
+          <strong>系统总计</strong>：约 <span class="highlight">92-257 万 tokens/天</span>，约 <span class="highlight">2760-7710 万 tokens/月</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
 <main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
@@ -1549,7 +2072,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology">("main");
+const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -2222,6 +2745,134 @@ watch(
   padding-left: 8px;
   background: rgba(59, 130, 246, 0.05);
   border-radius: 2px;
+}
+
+/* 总结页面样式 */
+.summary-arch {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 20px;
+}
+.arch-layer {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  overflow: hidden;
+}
+.layer-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.layer-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #3b82f6, #9333ea);
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  border-radius: 8px;
+}
+.layer-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.layer-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.summary-dimension {
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
+  padding-left: 16px;
+  padding-bottom: 16px;
+}
+.dim-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 12px;
+}
+.dim-content {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.dim-content ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.dim-content li {
+  margin-bottom: 8px;
+}
+.dim-content strong {
+  color: #93c5fd;
+}
+.graph-example {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 4px;
+  padding: 12px;
+  margin: 8px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #60a5fa;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.summary-total {
+  margin-top: 32px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(147, 51, 234, 0.15));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+.summary-total h4 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 16px;
+}
+.total-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.total-item {
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 4px;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+.total-item strong {
+  color: #93c5fd;
+}
+.total-summary {
+  margin-top: 8px;
+  padding: 16px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  font-size: 16px;
+  color: #e2e8f0;
+  text-align: center;
+}
+.total-summary strong {
+  color: #93c5fd;
+}
+.highlight {
+  color: #fbbf24;
+  font-weight: bold;
+  font-size: 18px;
 }
 .flow-arrow {
   font-size: 20px;
