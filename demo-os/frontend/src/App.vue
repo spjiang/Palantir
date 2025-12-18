@@ -778,7 +778,16 @@
           </div>
           <div class="form-row">
             <label>默认责任单位</label>
-            <input v-model="taskTemplateOwner" placeholder="如 区排水、交警" />
+            <select v-model="taskTemplateOwner">
+              <option>区排水</option>
+              <option>交警</option>
+              <option>消防</option>
+              <option>应急管理</option>
+              <option>市政</option>
+              <option>水务</option>
+              <option>气象</option>
+              <option>交通</option>
+            </select>
           </div>
           <div class="form-row">
             <label>默认 SLA（分钟）</label>
