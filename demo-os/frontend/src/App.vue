@@ -609,6 +609,8 @@ watch(
   border-radius: 12px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
 }
 .map-title {
   font-weight: 700;
@@ -616,8 +618,9 @@ watch(
 }
 .map {
   width: 100%;
-  min-height: 220px;
+  min-height: 260px;
   height: 100%;
+  flex: 1 1 auto;
   border-radius: 10px;
   overflow: hidden;
 }
@@ -628,6 +631,7 @@ watch(
 /* Leaflet 默认图标修正 */
 :global(.leaflet-container) {
   background: #0c1220;
+  height: 100%;
 }
 :global(.leaflet-popup-content) {
   color: #0c1220;
