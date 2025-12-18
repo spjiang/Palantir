@@ -9,6 +9,7 @@
       <div class="meta tabs">
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
         <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'">数据接入与治理</button>
+        <button :class="{ active: activePage === 'model' }" @click="activePage = 'model'">风险推理/模型</button>
         <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'">本体/语义选型</button>
       </div>
     </header>
@@ -388,6 +389,202 @@
   </section>
 </main>
 
+<main v-else-if="activePage === 'model'" class="grid single">
+  <section class="card wide">
+    <h3>风险推理（模型服务 L3 - 1.9.3）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示风险推理模型层的技术方案与业务流程。</p>
+    
+    <div class="flow-diagram">
+      <div class="flow-title">业务流程：数据 → 特征 → 推理 → 输出</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">数据输入</div>
+            <div class="step-desc">从 ODS/TSDB 获取对象状态（雨量/水位/泵站/路况等特征）</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">特征工程</div>
+            <div class="step-desc">特征提取、归一化、窗口聚合、缺失值处理</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">模型推理</div>
+            <div class="step-desc">风险评分（0~10）、风险等级（红/橙/黄/绿）、置信度（0~1）</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-title">可解释性</div>
+            <div class="step-desc">解释因子（Top3 贡献特征）、置信度说明</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <div class="step-title">服务输出</div>
+            <div class="step-desc">TopN API、热力图 API、单对象查询 API</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">模型类型</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>规则模型</strong><span>可解释线性/规则打分（演示级）</span></div>
+          <div class="stack-item"><strong>机器学习</strong><span>XGBoost/LightGBM、随机森林、GBDT</span></div>
+          <div class="stack-item"><strong>深度学习</strong><span>LSTM/GRU（时序）、CNN（空间）、Transformer</span></div>
+          <div class="stack-item"><strong>混合模型</strong><span>规则+ML、集成学习、模型融合</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">推理引擎</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>Python 服务</strong><span>FastAPI + scikit-learn/XGBoost/PyTorch</span></div>
+          <div class="stack-item"><strong>模型服务化</strong><span>MLflow、Seldon、Kubeflow Serving</span></div>
+          <div class="stack-item"><strong>边缘推理</strong><span>ONNX Runtime、TensorRT、OpenVINO</span></div>
+          <div class="stack-item"><strong>批处理</strong><span>Spark MLlib、Flink ML、Ray Serve</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">特征工程</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>特征提取</strong><span>统计特征、时序特征、空间特征、交叉特征</span></div>
+          <div class="stack-item"><strong>特征选择</strong><span>相关性分析、重要性排序、降维（PCA/ICA）</span></div>
+          <div class="stack-item"><strong>特征存储</strong><span>特征库/特征集市、特征版本管理</span></div>
+          <div class="stack-item"><strong>在线特征</strong><span>实时特征计算、特征缓存、特征服务</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">可解释性</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>SHAP/LIME</strong><span>特征贡献度、局部/全局解释</span></div>
+          <div class="stack-item"><strong>规则提取</strong><span>决策树可视化、规则列表</span></div>
+          <div class="stack-item"><strong>注意力机制</strong><span>Transformer 注意力权重可视化</span></div>
+          <div class="stack-item"><strong>置信度</strong><span>模型不确定性、预测区间、校准</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">模型配置</div>
+        <div class="ont-desc muted">配置模型类型、版本、参数与推理规则</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>模型名称</label>
+            <input v-model="modelName" placeholder="如 内涝风险模型-v1" />
+          </div>
+          <div class="form-row">
+            <label>模型类型</label>
+            <select v-model="modelType">
+              <option>规则模型</option>
+              <option>XGBoost</option>
+              <option>LightGBM</option>
+              <option>LSTM</option>
+              <option>Transformer</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>风险阈值</label>
+            <input v-model="modelThresholds" placeholder="如 红≥7.0, 橙≥5.0, 黄≥3.5" />
+          </div>
+          <div class="form-row">
+            <label>特征列表</label>
+            <textarea v-model="modelFeatures" rows="2" placeholder="如：rain_now_mmph, water_level_m, pump_status"></textarea>
+          </div>
+          <button @click="addModel">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(m, idx) in models" :key="idx" class="ont-item">
+            <div><strong>{{ m.name }}</strong> <span class="muted">({{ m.type }})</span></div>
+            <div class="muted">阈值：{{ m.thresholds }}｜特征：{{ m.features }}</div>
+          </div>
+          <div v-if="models.length === 0" class="muted">尚未添加模型（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">特征配置</div>
+        <div class="ont-desc muted">配置特征提取规则、窗口聚合、缺失值处理策略</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>特征名称</label>
+            <input v-model="featureName" placeholder="如 rain_now_mmph" />
+          </div>
+          <div class="form-row">
+            <label>数据源</label>
+            <select v-model="featureSource">
+              <option>ODS</option>
+              <option>TSDB</option>
+              <option>实时流</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>窗口聚合</label>
+            <input v-model="featureWindow" placeholder="如 1小时滑动窗口、5分钟滚动窗口" />
+          </div>
+          <div class="form-row">
+            <label>处理规则</label>
+            <textarea v-model="featureRule" rows="2" placeholder="如：缺失值填充、异常值过滤、单位转换"></textarea>
+          </div>
+          <button @click="addFeature">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(f, idx) in features" :key="idx" class="ont-item">
+            <div><strong>{{ f.name }}</strong> <span class="muted">({{ f.source }})</span></div>
+            <div class="muted">窗口：{{ f.window }}｜规则：{{ f.rule }}</div>
+          </div>
+          <div v-if="features.length === 0" class="muted">尚未添加特征（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">推理任务</div>
+        <div class="ont-desc muted">配置推理任务（TopN、热力图、单对象查询）的触发条件与输出格式</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>任务类型</label>
+            <select v-model="inferTaskType">
+              <option>TopN 风险</option>
+              <option>热力图</option>
+              <option>单对象查询</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>触发条件</label>
+            <input v-model="inferTrigger" placeholder="如 定时5分钟、事件触发、API调用" />
+          </div>
+          <div class="form-row">
+            <label>输出格式</label>
+            <textarea v-model="inferOutput" rows="2" placeholder="如：risk_score, risk_level, confidence, explain_factors"></textarea>
+          </div>
+          <button @click="addInferTask">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(t, idx) in inferTasks" :key="idx" class="ont-item">
+            <div><strong>{{ t.type }}</strong> <span class="muted">({{ t.trigger }})</span></div>
+            <div class="muted">输出：{{ t.output }}</div>
+          </div>
+          <div v-if="inferTasks.length === 0" class="muted">尚未添加推理任务（演示本地态）。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
 <main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
@@ -594,7 +791,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "ontology">("main");
+const activePage = ref<"main" | "data" | "model" | "ontology">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -625,6 +822,24 @@ const dqTarget = ref("雨量站-001");
 const dqDimension = ref("完整性");
 const dqRule = ref("字段非空、延迟<5分钟");
 const dqRules = ref<{ target: string; dimension: string; rule: string }[]>([]);
+
+// 风险推理/模型演示（前端本地状态）
+const modelName = ref("内涝风险模型-v1");
+const modelType = ref("规则模型");
+const modelThresholds = ref("红≥7.0, 橙≥5.0, 黄≥3.5");
+const modelFeatures = ref("rain_now_mmph, water_level_m, pump_status, elevation_m");
+const models = ref<{ name: string; type: string; thresholds: string; features: string }[]>([]);
+
+const featureName = ref("rain_now_mmph");
+const featureSource = ref("TSDB");
+const featureWindow = ref("1小时滑动窗口");
+const featureRule = ref("缺失值填充、异常值过滤");
+const features = ref<{ name: string; source: string; window: string; rule: string }[]>([]);
+
+const inferTaskType = ref("TopN 风险");
+const inferTrigger = ref("API调用");
+const inferOutput = ref("risk_score, risk_level, confidence, explain_factors");
+const inferTasks = ref<{ type: string; trigger: string; output: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -785,6 +1000,32 @@ function addDqRule() {
     target: dqTarget.value.trim() || "未指定",
     dimension: dqDimension.value,
     rule: dqRule.value.trim() || "无规则",
+  });
+}
+
+function addModel() {
+  models.value.unshift({
+    name: modelName.value.trim() || "未命名",
+    type: modelType.value,
+    thresholds: modelThresholds.value.trim() || "未设置",
+    features: modelFeatures.value.trim() || "无",
+  });
+}
+
+function addFeature() {
+  features.value.unshift({
+    name: featureName.value.trim() || "未命名",
+    source: featureSource.value,
+    window: featureWindow.value.trim() || "未设置",
+    rule: featureRule.value.trim() || "无规则",
+  });
+}
+
+function addInferTask() {
+  inferTasks.value.unshift({
+    type: inferTaskType.value,
+    trigger: inferTrigger.value.trim() || "未设置",
+    output: inferOutput.value.trim() || "无",
   });
 }
 
@@ -998,6 +1239,75 @@ watch(
 .stack-item span {
   color: #9fb2d4;
   font-size: 12px;
+}
+.flow-diagram {
+  margin-top: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.flow-title {
+  font-weight: 700;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.flow-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.flow-step {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
+  color: #0c1220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+}
+.step-content {
+  text-align: center;
+}
+.step-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.step-desc {
+  font-size: 12px;
+  color: #9fb2d4;
+}
+.flow-arrow {
+  font-size: 20px;
+  color: #4f8bff;
+  font-weight: 800;
+}
+@media (max-width: 980px) {
+  .flow-steps {
+    flex-direction: column;
+  }
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
 }
 .ont-grid {
   display: grid;
