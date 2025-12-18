@@ -90,9 +90,9 @@
                 <div class="tile-top">confidence</div>
                 <div class="tile-num small">{{ selectedTargetObj.confidence.toFixed(2) }}</div>
               </div>
-              <div class="tile">
-                <div class="tile-top">风险等级</div>
-                <div class="badge">{{ selectedTargetObj.risk_level }}</div>
+                <div class="tile">
+                  <div class="tile-top">风险等级</div>
+                  <div class="badge" :class="'level-' + selectedTargetObj.risk_level">{{ selectedTargetObj.risk_level }}</div>
               </div>
             </div>
             <div class="twin-factors">
@@ -703,6 +703,26 @@ watch(
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.badge.level-红 {
+  background: rgba(220, 38, 38, 0.2);
+  border-color: rgba(220, 38, 38, 0.6);
+  color: #fff;
+}
+.badge.level-橙 {
+  background: rgba(249, 115, 22, 0.2);
+  border-color: rgba(249, 115, 22, 0.6);
+  color: #fff;
+}
+.badge.level-黄 {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.6);
+  color: #fff;
+}
+.badge.level-绿 {
+  background: rgba(21, 128, 61, 0.2);
+  border-color: rgba(21, 128, 61, 0.6);
+  color: #fff;
 }
 .twin-factors {
   border: 1px dashed rgba(255, 255, 255, 0.14);
