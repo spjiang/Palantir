@@ -339,6 +339,7 @@ const riskSummary = computed(() => {
 
 // 演示：为 road-001..008 生成重庆周边的示例坐标
 const targetCoords: Record<string, [number, number]> = {
+  // A-001（老数据兼容）
   "road-001": [29.563, 106.551],
   "road-002": [29.565, 106.56],
   "road-003": [29.57, 106.54],
@@ -351,6 +352,31 @@ const targetCoords: Record<string, [number, number]> = {
   "road-010": [29.573, 106.552],
   "road-011": [29.566, 106.533],
   "road-012": [29.559, 106.568],
+  // 新区域前缀 A-002/A-003
+  "a-002-road-001": [29.58, 106.57],
+  "a-002-road-002": [29.582, 106.565],
+  "a-002-road-003": [29.584, 106.555],
+  "a-002-road-004": [29.578, 106.548],
+  "a-002-road-005": [29.586, 106.54],
+  "a-002-road-006": [29.59, 106.53],
+  "a-002-road-007": [29.593, 106.545],
+  "a-002-road-008": [29.587, 106.555],
+  "a-002-road-009": [29.581, 106.535],
+  "a-002-road-010": [29.585, 106.52],
+  "a-002-road-011": [29.592, 106.525],
+  "a-002-road-012": [29.589, 106.515],
+  "a-003-road-001": [29.54, 106.53],
+  "a-003-road-002": [29.542, 106.54],
+  "a-003-road-003": [29.544, 106.55],
+  "a-003-road-004": [29.536, 106.52],
+  "a-003-road-005": [29.538, 106.51],
+  "a-003-road-006": [29.545, 106.505],
+  "a-003-road-007": [29.548, 106.515],
+  "a-003-road-008": [29.552, 106.52],
+  "a-003-road-009": [29.546, 106.495],
+  "a-003-road-010": [29.549, 106.488],
+  "a-003-road-011": [29.541, 106.49],
+  "a-003-road-012": [29.535, 106.5],
 };
 
 const mapRef = ref<HTMLDivElement | null>(null);
@@ -461,10 +487,31 @@ function renderMap() {
   Object.values(markers).forEach((m) => m.remove());
   markers = {};
 
+  const areaCenters: Record<string, [number, number]> = {
+    "A-001": [29.563, 106.551],
+    "A-002": [29.585, 106.54],
+    "A-003": [29.54, 106.52],
+  };
+
+  const getCoord = (id: string, area: string | undefined) => {
+    if (targetCoords[id]) return targetCoords[id];
+    const center = areaCenters[area || "A-001"] || [29.563, 106.551];
+    const hash = id.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+    const lat = center[0] + ((hash % 10) - 5) * 0.002;
+    const lng = center[1] + (((hash / 10) % 10) - 5) * 0.002;
+    return [lat, lng] as [number, number];
+  };
+
   topN.value.forEach((item) => {
-    const coord = targetCoords[item.target_id];
-    if (!coord) return;
-    const color = item.risk_level === "红" ? "#f87171" : item.risk_level === "橙" ? "#fb923c" : "#4ade80";
+    const coord = getCoord(item.target_id, item.area_id);
+    const color =
+      item.risk_level === "红"
+        ? "#f87171"
+        : item.risk_level === "橙"
+          ? "#fb923c"
+          : item.risk_level === "黄"
+            ? "#eab308"
+            : "#4ade80";
     const radius = Math.max(6, Math.min(14, item.risk_score)); // 用风险分控制大小
     const marker = L.circleMarker(coord, {
       color,

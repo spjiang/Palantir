@@ -296,9 +296,12 @@ def seed_demo_data():
             # 若该区域已有对象则跳过
             if s.query(ObjectState).filter(ObjectState.area_id == area_id).count() > 0:
                 continue
-            # 12 个路段对象，前 3 条调高风险（红/橙）
+            # 12 个路段对象，前 3 条调高风险（红/橙）；对象 ID 加入区域前缀避免主键冲突
             for i in range(1, 13):
-                oid = f"road-{i:03d}"
+                oid = f"{area_id.lower()}-road-{i:03d}"
+                # 已存在同 ID 则跳过
+                if s.get(ObjectState, oid):
+                    continue
                 high_risk = i <= 3
                 features = {
                     "rain_now_mmph": 60 + i * 3 if high_risk else 30 + i * 1.5,
