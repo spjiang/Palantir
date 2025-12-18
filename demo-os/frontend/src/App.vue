@@ -10,6 +10,7 @@
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
         <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'">数据接入与治理</button>
         <button :class="{ active: activePage === 'model' }" @click="activePage = 'model'">风险推理/模型</button>
+        <button :class="{ active: activePage === 'agent' }" @click="activePage = 'agent'">智能体决策</button>
         <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'">本体/语义选型</button>
       </div>
     </header>
@@ -585,6 +586,230 @@
   </section>
 </main>
 
+<main v-else-if="activePage === 'agent'" class="grid single">
+  <section class="card wide">
+    <h3>智能体决策（L4 - 1.6/1.9.4）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示智能体决策层的技术方案、业务流程与各节点功能。</p>
+    
+    <div class="flow-diagram">
+      <div class="flow-title">业务流程：TopN 风险 → RAG 检索 → 任务包编排 → 派单</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">输入 TopN 风险</div>
+            <div class="step-desc">接收模型输出的 TopN 风险点位（含 risk_score/level/confidence/explain_factors）</div>
+            <div class="step-agent muted small">智能体功能：解析风险数据，识别最高风险对象</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">RAG 证据检索</div>
+            <div class="step-desc">检索预案/规程/历史战报/对象上下文，形成“有依据的建议”</div>
+            <div class="step-agent muted small">智能体功能：向量检索、语义匹配、引用标注</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">任务包编排</div>
+            <div class="step-desc">生成 TaskPack/tasks[]（owner_org/SLA/required_evidence/need_approval）</div>
+            <div class="step-agent muted small">智能体功能：结构化输出、责任归属推理、SLA 计算</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-title">风控门禁</div>
+            <div class="step-desc">高风险动作（封控/停运/跨部门联动）需人审确认</div>
+            <div class="step-agent muted small">智能体功能：风险动作识别、审批流程触发</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <div class="step-title">派单下发</div>
+            <div class="step-desc">调用工作流 API 落库，通知责任单位/人员，启动 SLA 计时</div>
+            <div class="step-agent muted small">智能体功能：API 调用、错误处理、重试策略</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">RAG / 检索增强</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>向量数据库</strong><span>Chroma、Milvus、Pinecone、Weaviate</span></div>
+          <div class="stack-item"><strong>检索策略</strong><span>语义检索、混合检索（关键词+向量）、重排序</span></div>
+          <div class="stack-item"><strong>知识库</strong><span>预案/规程/历史战报/对象关系库</span></div>
+          <div class="stack-item"><strong>引用标注</strong><span>检索结果引用、来源追溯、置信度</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">LLM / 大模型</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>通用模型</strong><span>GPT-4、Claude、DeepSeek、通义千问</span></div>
+          <div class="stack-item"><strong>工具调用</strong><span>Function Calling、Structured Output、ReAct</span></div>
+          <div class="stack-item"><strong>提示工程</strong><span>Few-shot、Chain-of-Thought、角色设定</span></div>
+          <div class="stack-item"><strong>降级策略</strong><span>无 Key 时规则式编排、模型失败回退</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">编排框架</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>LangChain</strong><span>工具链、Agent、Memory、Streaming</span></div>
+          <div class="stack-item"><strong>AutoGen</strong><span>多智能体协作、角色分工</span></div>
+          <div class="stack-item"><strong>Semantic Kernel</strong><span>插件化、规划器、执行器</span></div>
+          <div class="stack-item"><strong>自定义编排</strong><span>状态机、工作流引擎集成</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">工具 / 能力</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>query_risk_topn</strong><span>查询 TopN 风险点位</span></div>
+          <div class="stack-item"><strong>get_object_state</strong><span>获取对象状态快照</span></div>
+          <div class="stack-item"><strong>create_task_pack</strong><span>任务包编排（结构化输出）</span></div>
+          <div class="stack-item"><strong>trigger_workflow</strong><span>触发工作流派单 API</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">工具配置</div>
+        <div class="ont-desc muted">配置智能体可调用的工具（API、函数、服务）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>工具名称</label>
+            <input v-model="toolName" placeholder="如 query_risk_topn" />
+          </div>
+          <div class="form-row">
+            <label>工具类型</label>
+            <select v-model="toolType">
+              <option>API 调用</option>
+              <option>函数调用</option>
+              <option>RAG 检索</option>
+              <option>工作流触发</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>描述</label>
+            <textarea v-model="toolDesc" rows="2" placeholder="工具功能说明，用于 LLM 理解何时调用"></textarea>
+          </div>
+          <div class="form-row">
+            <label>参数 Schema</label>
+            <textarea v-model="toolSchema" rows="2" placeholder="JSON Schema，如：{area_id: string, n: number}"></textarea>
+          </div>
+          <button @click="addTool">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(t, idx) in tools" :key="idx" class="ont-item">
+            <div><strong>{{ t.name }}</strong> <span class="muted">({{ t.type }})</span></div>
+            <div class="muted">{{ t.desc }}</div>
+            <div class="muted small">Schema: {{ t.schema }}</div>
+          </div>
+          <div v-if="tools.length === 0" class="muted">尚未添加工具（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">RAG 知识库配置</div>
+        <div class="ont-desc muted">配置知识库来源、检索策略、向量化模型</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>知识库名称</label>
+            <input v-model="ragName" placeholder="如 应急预案库" />
+          </div>
+          <div class="form-row">
+            <label>来源类型</label>
+            <select v-model="ragSource">
+              <option>预案文档</option>
+              <option>规程手册</option>
+              <option>历史战报</option>
+              <option>对象关系</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>向量数据库</label>
+            <select v-model="ragVectorDB">
+              <option>Chroma</option>
+              <option>Milvus</option>
+              <option>Pinecone</option>
+              <option>Weaviate</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>检索策略</label>
+            <textarea v-model="ragStrategy" rows="2" placeholder="如：语义检索 Top5 + 重排序 Top3"></textarea>
+          </div>
+          <button @click="addRag">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(r, idx) in rags" :key="idx" class="ont-item">
+            <div><strong>{{ r.name }}</strong> <span class="muted">({{ r.source }})</span></div>
+            <div class="muted">向量库：{{ r.vectorDB }}｜策略：{{ r.strategy }}</div>
+          </div>
+          <div v-if="rags.length === 0" class="muted">尚未添加知识库（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">任务包模板</div>
+        <div class="ont-desc muted">配置任务包模板（owner_org/SLA/required_evidence 等字段规则）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>模板名称</label>
+            <input v-model="taskTemplateName" placeholder="如 封控任务模板" />
+          </div>
+          <div class="form-row">
+            <label>任务类型</label>
+            <select v-model="taskTemplateType">
+              <option>现场巡查</option>
+              <option>封控准备</option>
+              <option>泵站启停</option>
+              <option>联动处置</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>默认责任单位</label>
+            <input v-model="taskTemplateOwner" placeholder="如 区排水、交警" />
+          </div>
+          <div class="form-row">
+            <label>默认 SLA（分钟）</label>
+            <input v-model="taskTemplateSla" placeholder="如 30" />
+          </div>
+          <div class="form-row">
+            <label>必传证据</label>
+            <textarea v-model="taskTemplateEvidence" rows="2" placeholder="如：定位, 照片, 视频"></textarea>
+          </div>
+          <div class="form-row">
+            <label>需审批</label>
+            <select v-model="taskTemplateApproval">
+              <option>是</option>
+              <option>否</option>
+            </select>
+          </div>
+          <button @click="addTaskTemplate">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(tt, idx) in taskTemplates" :key="idx" class="ont-item">
+            <div><strong>{{ tt.name }}</strong> <span class="muted">({{ tt.type }})</span></div>
+            <div class="muted">责任单位：{{ tt.owner }}｜SLA：{{ tt.sla }}分钟｜需审批：{{ tt.approval }}</div>
+            <div class="muted small">证据：{{ tt.evidence }}</div>
+          </div>
+          <div v-if="taskTemplates.length === 0" class="muted">尚未添加模板（演示本地态）。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
 <main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
@@ -791,7 +1016,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "model" | "ontology">("main");
+const activePage = ref<"main" | "data" | "model" | "agent" | "ontology">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -840,6 +1065,27 @@ const inferTaskType = ref("TopN 风险");
 const inferTrigger = ref("API调用");
 const inferOutput = ref("risk_score, risk_level, confidence, explain_factors");
 const inferTasks = ref<{ type: string; trigger: string; output: string }[]>([]);
+
+// 智能体决策演示（前端本地状态）
+const toolName = ref("query_risk_topn");
+const toolType = ref("API 调用");
+const toolDesc = ref("查询 TopN 风险点位（含风险/置信度/解释因子）");
+const toolSchema = ref("{area_id: string, n: number}");
+const tools = ref<{ name: string; type: string; desc: string; schema: string }[]>([]);
+
+const ragName = ref("应急预案库");
+const ragSource = ref("预案文档");
+const ragVectorDB = ref("Chroma");
+const ragStrategy = ref("语义检索 Top5 + 重排序 Top3");
+const rags = ref<{ name: string; source: string; vectorDB: string; strategy: string }[]>([]);
+
+const taskTemplateName = ref("封控任务模板");
+const taskTemplateType = ref("封控准备");
+const taskTemplateOwner = ref("交警");
+const taskTemplateSla = ref("20");
+const taskTemplateEvidence = ref("定位, 照片");
+const taskTemplateApproval = ref("是");
+const taskTemplates = ref<{ name: string; type: string; owner: string; sla: string; evidence: string; approval: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -1026,6 +1272,35 @@ function addInferTask() {
     type: inferTaskType.value,
     trigger: inferTrigger.value.trim() || "未设置",
     output: inferOutput.value.trim() || "无",
+  });
+}
+
+function addTool() {
+  tools.value.unshift({
+    name: toolName.value.trim() || "未命名",
+    type: toolType.value,
+    desc: toolDesc.value.trim() || "无描述",
+    schema: toolSchema.value.trim() || "无",
+  });
+}
+
+function addRag() {
+  rags.value.unshift({
+    name: ragName.value.trim() || "未命名",
+    source: ragSource.value,
+    vectorDB: ragVectorDB.value,
+    strategy: ragStrategy.value.trim() || "未设置",
+  });
+}
+
+function addTaskTemplate() {
+  taskTemplates.value.unshift({
+    name: taskTemplateName.value.trim() || "未命名",
+    type: taskTemplateType.value,
+    owner: taskTemplateOwner.value.trim() || "未指定",
+    sla: taskTemplateSla.value.trim() || "60",
+    evidence: taskTemplateEvidence.value.trim() || "无",
+    approval: taskTemplateApproval.value,
   });
 }
 
@@ -1295,6 +1570,12 @@ watch(
 .step-desc {
   font-size: 12px;
   color: #9fb2d4;
+}
+.step-agent {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  font-size: 11px;
 }
 .flow-arrow {
   font-size: 20px;
