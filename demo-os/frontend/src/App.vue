@@ -263,17 +263,30 @@
 
     <div class="ont-grid">
       <div class="ont-card">
-        <div class="ont-title">对象 / 实体管理（演示表单）</div>
+        <div class="ont-title">对象 / 实体管理</div>
+        <div class="ont-desc muted">定义本体中的实体类型（如路段、泵站、事件等）及其属性</div>
         <div class="ont-form">
-          <input v-model="ontologyEntityId" placeholder="实体ID，如 road-segment" />
-          <input v-model="ontologyEntityLabel" placeholder="名称，如 路段" />
-          <select v-model="ontologyEntityType">
-            <option>实体</option>
-            <option>事件</option>
-            <option>设施</option>
-            <option>资源</option>
-          </select>
-          <textarea v-model="ontologyEntityAttrs" rows="2" placeholder="属性（逗号分隔）"></textarea>
+          <div class="form-row">
+            <label>实体ID</label>
+            <input v-model="ontologyEntityId" placeholder="如 road-segment" />
+          </div>
+          <div class="form-row">
+            <label>名称</label>
+            <input v-model="ontologyEntityLabel" placeholder="如 路段" />
+          </div>
+          <div class="form-row">
+            <label>类型</label>
+            <select v-model="ontologyEntityType">
+              <option>实体</option>
+              <option>事件</option>
+              <option>设施</option>
+              <option>资源</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>属性</label>
+            <textarea v-model="ontologyEntityAttrs" rows="2" placeholder="逗号分隔，如：名称, 位置, 责任单位"></textarea>
+          </div>
           <button @click="addOntologyEntity">保存到预览（本地）</button>
         </div>
         <div class="ont-list">
@@ -286,12 +299,25 @@
       </div>
 
       <div class="ont-card">
-        <div class="ont-title">关系管理（演示表单）</div>
+        <div class="ont-title">关系管理</div>
+        <div class="ont-desc muted">定义实体之间的关系（如路段→泵站、事件→责任单位等）</div>
         <div class="ont-form">
-          <input v-model="ontologyRelFrom" placeholder="起点实体ID，如 road-segment" />
-          <input v-model="ontologyRelTo" placeholder="终点实体ID，如 pump-station" />
-          <input v-model="ontologyRelType" placeholder="关系类型，如 供排水关联" />
-          <textarea v-model="ontologyRelDesc" rows="2" placeholder="描述"></textarea>
+          <div class="form-row">
+            <label>起点实体</label>
+            <input v-model="ontologyRelFrom" placeholder="如 road-segment" />
+          </div>
+          <div class="form-row">
+            <label>终点实体</label>
+            <input v-model="ontologyRelTo" placeholder="如 pump-station" />
+          </div>
+          <div class="form-row">
+            <label>关系类型</label>
+            <input v-model="ontologyRelType" placeholder="如 供排水关联" />
+          </div>
+          <div class="form-row">
+            <label>描述</label>
+            <textarea v-model="ontologyRelDesc" rows="2" placeholder="关系说明"></textarea>
+          </div>
           <button @click="addOntologyRelation">保存到预览（本地）</button>
         </div>
         <div class="ont-list">
@@ -790,11 +816,26 @@ watch(
 }
 .ont-title {
   font-weight: 700;
+  margin-bottom: 4px;
+}
+.ont-desc {
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 .ont-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.form-row label {
+  font-size: 12px;
+  color: #9fb2d4;
+  width: auto;
 }
 .ont-form input,
 .ont-form select,
@@ -809,6 +850,7 @@ watch(
 }
 .ont-form button {
   align-self: flex-start;
+  margin-top: 4px;
 }
 .ont-list {
   display: flex;
