@@ -13,7 +13,7 @@
         <button :class="{ active: activePage === 'model' }" @click="activePage = 'model'">L3 风险推理/模型</button>
         <button :class="{ active: activePage === 'agent' }" @click="activePage = 'agent'">L4 智能体决策</button>
         <button :class="{ active: activePage === 'workflow' }" @click="activePage = 'workflow'"> L5 执行闭环/工作流</button>
-        
+        <button :class="{ active: activePage === 'report' }" @click="activePage = 'report'">L6 战报与追溯</button>
       </div>
     </header>
 
@@ -1074,6 +1074,275 @@
   </section>
 </main>
 
+<main v-else-if="activePage === 'report'" class="grid single">
+  <section class="card wide">
+    <h3>战报与追溯（L6 - 1.9.6/1.4.6）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示战报生成与追溯层的技术方案与业务节点流程，每个节点的处理步骤可直接查看。</p>
+    
+    <div class="flow-diagram">
+      <div class="flow-title">业务流程：事件聚合 → 时间线构建 → 指标计算 → 状态追溯 → 报告生成 → 可视化展示</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">事件聚合</div>
+            <div class="step-desc">收集 TimelineEvent（incident_created/alert_event/task_completed/state_changed），按 incident_id 分组</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 查询 TimelineEvent 表，按 incident_id 过滤</div>
+              <div class="step-step-item">② 按 created_at 时间排序</div>
+              <div class="step-step-item">③ 按事件类型分类（创建/告警/任务/状态变更）</div>
+              <div class="step-step-item">④ 构建事件列表，保留 payload 完整信息</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">时间线构建</div>
+            <div class="step-desc">按时间顺序组织事件，生成时间线视图（时间轴/里程碑/关键节点）</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 按 created_at 排序所有事件</div>
+              <div class="step-step-item">② 识别关键里程碑（事件创建、首个告警、任务完成）</div>
+              <div class="step-step-item">③ 计算事件间隔时间（duration）</div>
+              <div class="step-step-item">④ 构建时间线 JSON 结构（时间点、事件类型、描述、关联对象）</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">指标计算</div>
+            <div class="step-desc">计算关键指标（任务完成率、SLA 达成率、响应时间、处置时长）</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 统计任务总数、已完成数、超时数</div>
+              <div class="step-step-item">② 计算完成率 = 已完成数 / 总数 × 100%</div>
+              <div class="step-step-item">③ 计算 SLA 达成率 = (总数 - 超时数) / 总数 × 100%</div>
+              <div class="step-step-item">④ 计算平均响应时间 = Σ(任务开始时间 - 分派时间) / 任务数</div>
+              <div class="step-step-item">⑤ 计算平均处置时长 = Σ(任务完成时间 - 任务开始时间) / 任务数</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-title">状态追溯</div>
+            <div class="step-desc">追溯对象状态变化历史（ObjectState 快照版本、状态回放、变更原因）</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 查询 ObjectState 表，按 object_id 过滤</div>
+              <div class="step-step-item">② 按 updated_at 排序，获取状态快照序列</div>
+              <div class="step-step-item">③ 对比相邻快照，识别状态变更（attrs/features 差异）</div>
+              <div class="step-step-item">④ 关联 TimelineEvent，找出触发状态变更的事件</div>
+              <div class="step-step-item">⑤ 构建状态变更链（时间点、变更前状态、变更后状态、触发事件）</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <div class="step-title">报告生成</div>
+            <div class="step-desc">生成结构化战报（事件标题、时间线、指标、状态追溯、附件链接）</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 组装事件基本信息（incident_id、标题、创建时间、状态）</div>
+              <div class="step-step-item">② 嵌入时间线数据（事件列表、里程碑）</div>
+              <div class="step-step-item">③ 嵌入指标数据（完成率、SLA 达成率、响应时间、处置时长）</div>
+              <div class="step-step-item">④ 嵌入状态追溯数据（对象状态变更链）</div>
+              <div class="step-step-item">⑤ 生成报告 JSON/PDF/HTML 格式</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">6</div>
+          <div class="step-content">
+            <div class="step-title">可视化展示</div>
+            <div class="step-desc">前端渲染时间线、指标图表、状态变化曲线、交互式追溯</div>
+            <div class="step-agent muted small">处理步骤：</div>
+            <div class="step-steps">
+              <div class="step-step-item">① 渲染时间线组件（垂直时间轴、事件卡片、里程碑标记）</div>
+              <div class="step-step-item">② 渲染指标卡片（完成率、SLA 达成率、响应时间、处置时长）</div>
+              <div class="step-step-item">③ 渲染状态追溯视图（状态快照列表、变更对比、触发事件）</div>
+              <div class="step-step-item">④ 支持交互（点击事件查看详情、点击状态快照查看完整数据）</div>
+              <div class="step-step-item">⑤ 支持导出（PDF、Excel、JSON）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">时间线存储</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>TimelineEvent</strong><span>事件表（id、incident_id、type、payload、created_at）</span></div>
+          <div class="stack-item"><strong>事件类型</strong><span>incident_created、alert_event、task_completed、state_changed</span></div>
+          <div class="stack-item"><strong>索引优化</strong><span>incident_id + created_at 联合索引、分区表（按时间）</span></div>
+          <div class="stack-item"><strong>查询优化</strong><span>按 incident_id 查询、时间范围过滤、分页加载</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">状态快照</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>ObjectState</strong><span>对象状态表（object_id、attrs、features、dq_tags、updated_at）</span></div>
+          <div class="stack-item"><strong>版本管理</strong><span>每次更新保留历史版本、版本号/时间戳标识</span></div>
+          <div class="stack-item"><strong>变更检测</strong><span>对比相邻版本、识别字段变更、记录变更原因</span></div>
+          <div class="stack-item"><strong>回放能力</strong><span>按时间点查询历史状态、状态回放动画</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">指标计算</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>实时指标</strong><span>任务完成率、SLA 达成率、响应时间、处置时长</span></div>
+          <div class="stack-item"><strong>聚合计算</strong><span>SQL 聚合函数、窗口函数、时间序列聚合</span></div>
+          <div class="stack-item"><strong>缓存策略</strong><span>Redis 缓存热点指标、定时刷新、失效策略</span></div>
+          <div class="stack-item"><strong>指标导出</strong><span>CSV、Excel、JSON、API 接口</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">报告生成</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>模板引擎</strong><span>Jinja2、Handlebars、React Server Components</span></div>
+          <div class="stack-item"><strong>格式支持</strong><span>JSON、HTML、PDF（WeasyPrint/Puppeteer）、Excel</span></div>
+          <div class="stack-item"><strong>报告内容</strong><span>事件信息、时间线、指标、状态追溯、附件</span></div>
+          <div class="stack-item"><strong>异步生成</strong><span>后台任务队列、进度查询、结果存储</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">可视化组件</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>时间线组件</strong><span>垂直时间轴、事件卡片、里程碑、交互式缩放</span></div>
+          <div class="stack-item"><strong>图表库</strong><span>ECharts、D3.js、Chart.js、Recharts</span></div>
+          <div class="stack-item"><strong>状态追溯</strong><span>状态快照列表、变更对比视图、时间轴回放</span></div>
+          <div class="stack-item"><strong>交互功能</strong><span>点击查看详情、筛选过滤、导出下载</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">追溯查询</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>时间范围查询</strong><span>按时间区间查询事件、状态快照</span></div>
+          <div class="stack-item"><strong>对象追溯</strong><span>按 object_id 查询状态历史、关联事件</span></div>
+          <div class="stack-item"><strong>事件关联</strong><span>事件 → 状态变更、状态变更 → 触发事件</span></div>
+          <div class="stack-item"><strong>全文检索</strong><span>Elasticsearch、PostgreSQL 全文索引、关键词搜索</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">时间线配置</div>
+        <div class="ont-desc muted">配置时间线展示规则（事件类型过滤、时间范围、里程碑定义）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>时间线名称</label>
+            <input v-model="timelineName" placeholder="如 事件处置时间线" />
+          </div>
+          <div class="form-row">
+            <label>事件类型过滤</label>
+            <textarea v-model="timelineEventTypes" rows="2" placeholder="如：incident_created, alert_event, task_completed"></textarea>
+          </div>
+          <div class="form-row">
+            <label>里程碑定义</label>
+            <textarea v-model="timelineMilestones" rows="2" placeholder="如：事件创建, 首个告警, 任务完成"></textarea>
+          </div>
+          <div class="form-row">
+            <label>时间范围（小时）</label>
+            <input v-model="timelineTimeRange" placeholder="如 24" />
+          </div>
+          <button @click="addTimeline">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(t, idx) in timelines" :key="idx" class="ont-item">
+            <div><strong>{{ t.name }}</strong></div>
+            <div class="muted">事件类型：{{ t.eventTypes }}｜时间范围：{{ t.timeRange }}小时</div>
+            <div class="muted small">里程碑：{{ t.milestones }}</div>
+          </div>
+          <div v-if="timelines.length === 0" class="muted">尚未添加时间线配置（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">指标配置</div>
+        <div class="ont-desc muted">配置指标计算规则（指标定义、计算公式、刷新频率）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>指标名称</label>
+            <input v-model="metricName" placeholder="如 任务完成率" />
+          </div>
+          <div class="form-row">
+            <label>指标类型</label>
+            <select v-model="metricType">
+              <option>完成率</option>
+              <option>SLA 达成率</option>
+              <option>响应时间</option>
+              <option>处置时长</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>计算公式</label>
+            <textarea v-model="metricFormula" rows="2" placeholder="如：已完成数 / 总数 × 100%"></textarea>
+          </div>
+          <div class="form-row">
+            <label>刷新频率（分钟）</label>
+            <input v-model="metricRefresh" placeholder="如 5" />
+          </div>
+          <button @click="addMetric">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(m, idx) in metrics" :key="idx" class="ont-item">
+            <div><strong>{{ m.name }}</strong> <span class="muted">({{ m.type }})</span></div>
+            <div class="muted">公式：{{ m.formula }}｜刷新：{{ m.refresh }}分钟</div>
+          </div>
+          <div v-if="metrics.length === 0" class="muted">尚未添加指标配置（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">报告模板</div>
+        <div class="ont-desc muted">配置报告模板（模板内容、格式、导出选项）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>模板名称</label>
+            <input v-model="reportTemplateName" placeholder="如 事件处置战报模板" />
+          </div>
+          <div class="form-row">
+            <label>报告格式</label>
+            <select v-model="reportTemplateFormat">
+              <option>JSON</option>
+              <option>HTML</option>
+              <option>PDF</option>
+              <option>Excel</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>包含内容</label>
+            <textarea v-model="reportTemplateContent" rows="3" placeholder="如：事件信息, 时间线, 指标, 状态追溯"></textarea>
+          </div>
+          <div class="form-row">
+            <label>模板文件</label>
+            <input v-model="reportTemplateFile" placeholder="如 template.html" />
+          </div>
+          <button @click="addReportTemplate">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(rt, idx) in reportTemplates" :key="idx" class="ont-item">
+            <div><strong>{{ rt.name }}</strong> <span class="muted">({{ rt.format }})</span></div>
+            <div class="muted">内容：{{ rt.content }}｜模板：{{ rt.file }}</div>
+          </div>
+          <div v-if="reportTemplates.length === 0" class="muted">尚未添加报告模板（演示本地态）。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
 <main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
@@ -1280,7 +1549,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "ontology">("main");
+const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -1371,6 +1640,25 @@ const approvalUsers = ref("部门主管, 分管领导");
 const approvalRule = ref("高风险任务需部门主管+分管领导会签");
 const approvalTimeout = ref("升级审批");
 const approvals = ref<{ name: string; type: string; users: string; rule: string; timeout: string }[]>([]);
+
+// 战报与追溯演示（前端本地状态）
+const timelineName = ref("事件处置时间线");
+const timelineEventTypes = ref("incident_created, alert_event, task_completed");
+const timelineMilestones = ref("事件创建, 首个告警, 任务完成");
+const timelineTimeRange = ref("24");
+const timelines = ref<{ name: string; eventTypes: string; milestones: string; timeRange: string }[]>([]);
+
+const metricName = ref("任务完成率");
+const metricType = ref("完成率");
+const metricFormula = ref("已完成数 / 总数 × 100%");
+const metricRefresh = ref("5");
+const metrics = ref<{ name: string; type: string; formula: string; refresh: string }[]>([]);
+
+const reportTemplateName = ref("事件处置战报模板");
+const reportTemplateFormat = ref("HTML");
+const reportTemplateContent = ref("事件信息, 时间线, 指标, 状态追溯");
+const reportTemplateFile = ref("template.html");
+const reportTemplates = ref<{ name: string; format: string; content: string; file: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -1615,6 +1903,33 @@ function addApproval() {
     users: approvalUsers.value.trim() || "未指定",
     rule: approvalRule.value.trim() || "无规则",
     timeout: approvalTimeout.value,
+  });
+}
+
+function addTimeline() {
+  timelines.value.unshift({
+    name: timelineName.value.trim() || "未命名",
+    eventTypes: timelineEventTypes.value.trim() || "无",
+    milestones: timelineMilestones.value.trim() || "无",
+    timeRange: timelineTimeRange.value.trim() || "24",
+  });
+}
+
+function addMetric() {
+  metrics.value.unshift({
+    name: metricName.value.trim() || "未命名",
+    type: metricType.value,
+    formula: metricFormula.value.trim() || "无",
+    refresh: metricRefresh.value.trim() || "5",
+  });
+}
+
+function addReportTemplate() {
+  reportTemplates.value.unshift({
+    name: reportTemplateName.value.trim() || "未命名",
+    format: reportTemplateFormat.value,
+    content: reportTemplateContent.value.trim() || "无",
+    file: reportTemplateFile.value.trim() || "template.html",
   });
 }
 
@@ -1890,6 +2205,23 @@ watch(
   padding-top: 6px;
   border-top: 1px dashed rgba(255, 255, 255, 0.1);
   font-size: 11px;
+}
+.step-steps {
+  margin-top: 8px;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.step-step-item {
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  padding: 2px 0;
+  border-left: 2px solid rgba(59, 130, 246, 0.3);
+  padding-left: 8px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 2px;
 }
 .flow-arrow {
   font-size: 20px;
