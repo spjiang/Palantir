@@ -13,7 +13,9 @@
         <h3>1) 风险热力图（简化为 TopN 列表）</h3>
         <div class="row">
           <label>区域</label>
-          <input v-model="areaId" />
+          <select v-model="areaId">
+            <option v-for="a in areaOptions" :key="a.value" :value="a.value">{{ a.label }}</option>
+          </select>
           <button @click="loadTopN">刷新 TopN</button>
         </div>
         <div class="map-and-list">
@@ -298,6 +300,11 @@ const layerBlocks = [
 ];
 
 const areaId = ref("A-001");
+const areaOptions = [
+  { label: "A-001（演示默认）", value: "A-001" },
+  { label: "A-002（演示）", value: "A-002" },
+  { label: "A-003（演示）", value: "A-003" },
+];
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
@@ -340,6 +347,10 @@ const targetCoords: Record<string, [number, number]> = {
   "road-006": [29.568, 106.548],
   "road-007": [29.558, 106.535],
   "road-008": [29.552, 106.558],
+  "road-009": [29.548, 106.545],
+  "road-010": [29.573, 106.552],
+  "road-011": [29.566, 106.533],
+  "road-012": [29.559, 106.568],
 };
 
 const mapRef = ref<HTMLDivElement | null>(null);
@@ -730,6 +741,15 @@ textarea {
 input::placeholder,
 textarea::placeholder {
   color: #8fa0c4;
+}
+select {
+  width: 200px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5ecff;
 }
 button {
   border: 1px solid rgba(255, 255, 255, 0.18);

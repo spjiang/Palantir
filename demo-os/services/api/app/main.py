@@ -286,46 +286,57 @@ def incident_report(incident_id: str):
 def seed_demo_data():
     now = datetime.now(timezone.utc)
     with db.session() as s:
-        # 已存在就不重复种子
-        if s.query(ObjectState).count() > 0:
-            return
-        area_id = "A-001"
-        # 5 个路段对象（简化 features）
-        for i in range(1, 9):
-            oid = f"road-{i:03d}"
+        areas = [
+            ("A-001", "示范区"),
+            ("A-002", "江北新区"),
+            ("A-003", "高新区"),
+        ]
+
+        for area_id, admin_area in areas:
+            # 若该区域已有对象则跳过
+            if s.query(ObjectState).filter(ObjectState.area_id == area_id).count() > 0:
+                continue
+            # 12 个路段对象，前 3 条调高风险（红/橙）
+            for i in range(1, 13):
+                oid = f"road-{i:03d}"
+                high_risk = i <= 3
+                features = {
+                    "rain_now_mmph": 60 + i * 3 if high_risk else 30 + i * 1.5,
+                    "rain_1h_mm": 40 + i * 2 if high_risk else 20 + i * 1.2,
+                    "water_level_m": 6.0 - i * 0.15 if high_risk else 2.5 + (i % 5) * 0.3,
+                    "pump_status": "fault" if high_risk and i % 2 == 0 else ("running" if i % 4 != 0 else "fault"),
+                    "traffic_index": 0.6 + (i % 4) * 0.1,
+                    "drainage_capacity": 0.8 if high_risk else 1.0 + (i % 3) * 0.2,
+                    "elevation_m": 2.5 if high_risk else 5.0 - i * 0.2,
+                }
+                s.add(
+                    ObjectState(
+                        object_id=oid,
+                        object_type="road_segment",
+                        area_id=area_id,
+                        attrs={"name": f"路段{i}", "admin_area": admin_area, "elevation_m": features["elevation_m"], "drainage_capacity": features["drainage_capacity"]},
+                        features=features,
+                        dq_tags={"freshness": 0.95, "validity": True},
+                        updated_at=now,
+                    )
+                )
+
+            # 默认事件与预警
+            inc = Incident(area_id=area_id, title=f"{admin_area} 暴雨内涝处置事件（演示）", status="open")
+            s.add(inc)
+            s.flush()
+            s.add(TimelineEvent(incident_id=inc.id, type="incident_created", payload={"title": inc.title}))
             s.add(
-                ObjectState(
-                    object_id=oid,
-                    object_type="road_segment",
+                AlertEvent(
+                    incident_id=inc.id,
                     area_id=area_id,
-                    attrs={"name": f"路段{i}", "admin_area": "示范区", "elevation_m": 5.0 - i * 0.3, "drainage_capacity": 1.0 + (i % 3) * 0.2},
-                    features={
-                        "rain_now_mmph": 30 + i * 2,
-                        "rain_1h_mm": 20 + i * 1.5,
-                        "water_level_m": 2.0 + (i % 4) * 0.2,
-                        "pump_status": "running" if i % 4 != 0 else "fault",
-                        "traffic_index": 0.4 + (i % 5) * 0.1,
-                    },
-                    dq_tags={"freshness": 0.95, "validity": True},
-                    updated_at=now,
+                    level="红" if area_id == "A-002" else "橙",
+                    reason="雨强上升+低洼路段风险提升",
+                    created_at=now - timedelta(minutes=5),
                 )
             )
-        # 一个默认事件
-        inc = Incident(area_id=area_id, title="城市暴雨内涝处置事件（演示）", status="open")
-        s.add(inc)
-        s.flush()
-        s.add(TimelineEvent(incident_id=inc.id, type="incident_created", payload={"title": inc.title}))
-        # 一个预警事件（用于时间线）
-        s.add(
-            AlertEvent(
-                incident_id=inc.id,
-                area_id=area_id,
-                level="橙",
-                reason="雨强上升+低洼路段风险提升",
-                created_at=now - timedelta(minutes=5),
-            )
-        )
-        s.add(TimelineEvent(incident_id=inc.id, type="alert_event", payload={"level": "橙", "reason": "雨强上升"}))
+            s.add(TimelineEvent(incident_id=inc.id, type="alert_event", payload={"level": "红" if area_id == "A-002" else "橙", "reason": "雨强上升"}))
+
         s.commit()
 
 
