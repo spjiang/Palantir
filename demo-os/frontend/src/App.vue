@@ -616,7 +616,8 @@ watch(
 }
 .map {
   width: 100%;
-  height: 280px;
+  min-height: 220px;
+  height: 100%;
   border-radius: 10px;
   overflow: hidden;
 }
@@ -705,12 +706,12 @@ watch(
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .badge.level-红 {
-  background: rgba(220, 38, 38, 0.2);
+  background: rgba(238, 9, 9, 0.2);
   border-color: rgba(220, 38, 38, 0.6);
   color: #fff;
 }
 .badge.level-橙 {
-  background: rgba(249, 115, 22, 0.2);
+  background: rgba(229, 107, 19, 0.2);
   border-color: rgba(249, 115, 22, 0.6);
   color: #fff;
 }
