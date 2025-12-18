@@ -68,7 +68,7 @@ def _safe_float(v: Any, default: float) -> float:
         return default
 
 
-def _compute(features: dict[str, Any]) -> tuple[float, float, list[str]]:
+def _compute(features: dict[str, Any], target_id: str) -> tuple[float, float, list[str]]:
     """
     返回：(risk_score, confidence, explain_factors)
     - risk_score：0~10
@@ -125,16 +125,19 @@ def _compute(features: dict[str, Any]) -> tuple[float, float, list[str]]:
     if score > 10:
         score = 10.0
 
-    # 置信度（演示）：关键字段缺失会降低
-    confidence = 0.85
+    # 置信度（演示）：按字段完整性和对象稳定噪声给出 0.6~0.95 区间
+    base_conf = 0.8
     if "rain_now_mmph" not in features:
-        confidence -= 0.20
+        base_conf -= 0.15
     if "water_level_m" not in features:
-        confidence -= 0.20
+        base_conf -= 0.15
     if "pump_status" not in features:
-        confidence -= 0.10
-    if confidence < 0.1:
-        confidence = 0.1
+        base_conf -= 0.08
+    # 对象级稳定扰动，避免所有点同一个值
+    jitter = ((sum(ord(c) for c in target_id) % 21) - 10) / 100  # -0.10 ~ +0.10
+    confidence = base_conf + jitter
+    if confidence < 0.6:
+        confidence = 0.6
     if confidence > 0.95:
         confidence = 0.95
 
@@ -153,7 +156,7 @@ def health():
 def infer_topn(req: InferTopNRequest):
     items: list[InferItem] = []
     for t in req.targets:
-        score, confidence, explain_factors = _compute(t.features)
+        score, confidence, explain_factors = _compute(t.features, t.target_id)
         items.append(
             InferItem(
                 target_id=t.target_id,
