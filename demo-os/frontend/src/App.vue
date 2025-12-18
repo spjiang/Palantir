@@ -9,7 +9,7 @@
     </header>
 
     <main class="grid">
-      <section class="card">
+      <section class="card wide">
         <h3>1) 风险热力图（简化为 TopN 列表）</h3>
         <div class="row">
           <label>区域</label>
@@ -34,7 +34,12 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="it in topN" :key="it.target_id" @click="pickTarget(it.target_id)" :class="{ active: it.target_id === selectedTarget }">
+                <tr
+                  v-for="it in topN"
+                  :key="it.target_id"
+                  @click="pickTarget(it.target_id)"
+                  :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
+                >
                   <td>{{ it.target_id }}</td>
                   <td>{{ it.risk_level }}</td>
                   <td>{{ it.risk_score.toFixed(2) }}</td>
@@ -43,6 +48,26 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+        <div class="summary-tiles">
+          <div class="s-tile">
+            <div class="s-label">TopN 数量</div>
+            <div class="s-value">{{ riskSummary.total }}</div>
+          </div>
+          <div class="s-tile">
+            <div class="s-label">最高分</div>
+            <div class="s-value">{{ riskSummary.maxScore.toFixed(2) || "-" }}</div>
+            <div class="s-sub muted" v-if="riskSummary.maxId">目标：{{ riskSummary.maxId }}</div>
+          </div>
+          <div class="s-tile">
+            <div class="s-label">分布</div>
+            <div class="s-tags">
+              <span class="chip level-chip red">红 {{ riskSummary.counts.红 || 0 }}</span>
+              <span class="chip level-chip orange">橙 {{ riskSummary.counts.橙 || 0 }}</span>
+              <span class="chip level-chip yellow">黄 {{ riskSummary.counts.黄 || 0 }}</span>
+              <span class="chip level-chip green">绿 {{ riskSummary.counts.绿 || 0 }}</span>
+            </div>
           </div>
         </div>
         <div v-if="selectedTargetObj" class="twin">
@@ -290,6 +315,21 @@ const selectedTargetObj = computed(() => {
   return found || topN.value[0];
 });
 
+const riskSummary = computed(() => {
+  const total = topN.value.length;
+  const counts = { 红: 0, 橙: 0, 黄: 0, 绿: 0 };
+  let maxScore = 0;
+  let maxId = "";
+  topN.value.forEach((it: any) => {
+    if (counts[it.risk_level] !== undefined) counts[it.risk_level] += 1;
+    if (it.risk_score > maxScore) {
+      maxScore = it.risk_score;
+      maxId = it.target_id;
+    }
+  });
+  return { total, counts, maxScore, maxId };
+});
+
 // 演示：为 road-001..008 生成重庆周边的示例坐标
 const targetCoords: Record<string, [number, number]> = {
   "road-001": [29.563, 106.551],
@@ -307,7 +347,7 @@ let map: L.Map | null = null;
 let markers: Record<string, L.CircleMarker> = {};
 
 async function loadTopN() {
-  const { data } = await axios.get(`${apiBase}/risk/topn`, { params: { area_id: areaId.value, n: 5 } });
+  const { data } = await axios.get(`${apiBase}/risk/topn`, { params: { area_id: areaId.value, n: 12 } });
   topN.value = data.items || [];
   if (!selectedTarget.value && topN.value.length > 0) {
     selectedTarget.value = topN.value[0].target_id || "";
@@ -621,6 +661,51 @@ watch(
   flex-wrap: wrap;
   gap: 6px;
 }
+.summary-tiles {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.s-tile {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.s-label {
+  color: #9fb2d4;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.s-value {
+  font-size: 20px;
+  font-weight: 800;
+}
+.s-sub {
+  font-size: 12px;
+}
+.s-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.level-chip.red {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+.level-chip.orange {
+  background: rgba(251, 146, 60, 0.16);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+.level-chip.yellow {
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.5);
+}
+.level-chip.green {
+  background: rgba(74, 222, 128, 0.16);
+  border-color: rgba(74, 222, 128, 0.5);
+}
 .row {
   display: flex;
   align-items: center;
@@ -679,6 +764,18 @@ button:hover {
 .tbl tbody tr:hover {
   background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
+}
+.tbl tbody tr.level-红 {
+  background: rgba(248, 113, 113, 0.16);
+}
+.tbl tbody tr.level-橙 {
+  background: rgba(251, 146, 60, 0.16);
+}
+.tbl tbody tr.level-黄 {
+  background: rgba(234, 179, 8, 0.16);
+}
+.tbl tbody tr.level-绿 {
+  background: rgba(74, 222, 128, 0.16);
 }
 .muted {
   color: #9fb2d4;
