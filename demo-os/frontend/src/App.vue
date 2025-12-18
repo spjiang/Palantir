@@ -8,6 +8,7 @@
       </div>
       <div class="meta tabs">
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
+        <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'">数据接入与治理</button>
         <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'">本体/语义选型</button>
       </div>
     </header>
@@ -230,7 +231,164 @@
       </section>
     </main>
 
-<main v-else class="grid single">
+<main v-else-if="activePage === 'data'" class="grid single">
+  <section class="card wide">
+    <h3>数据接入与治理（L1 - 1.4 数据设计）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示数据接入、存储、质量与治理层的技术方案示意。</p>
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">数据接入 / 连接器</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>雨量站</strong><span>HTTP/API、MQTT、文件轮询</span></div>
+          <div class="stack-item"><strong>雷达数据</strong><span>FTP/SFTP、对象存储、实时流</span></div>
+          <div class="stack-item"><strong>水位/泵站</strong><span>Modbus/OPC、IoT 平台、数据库直连</span></div>
+          <div class="stack-item"><strong>路况/事件</strong><span>API 网关、消息队列（Kafka/RabbitMQ）</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">数据存储分层</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>Raw 原始层</strong><span>原始数据原样落库，保留完整上下文</span></div>
+          <div class="stack-item"><strong>ODS 明细层</strong><span>清洗对齐后的操作型明细，统一口径</span></div>
+          <div class="stack-item"><strong>TSDB 时序层</strong><span>高频指标/传感器时序存储（InfluxDB/TimescaleDB）</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">数据质量（DQ）</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>完整性</strong><span>字段缺失率、记录完整度</span></div>
+          <div class="stack-item"><strong>及时性</strong><span>数据延迟、更新频率</span></div>
+          <div class="stack-item"><strong>一致性</strong><span>跨源口径对齐、单位统一</span></div>
+          <div class="stack-item"><strong>准确性</strong><span>异常值检测、范围校验</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">数据治理</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>血缘追溯</strong><span>数据来源、转换链路、依赖关系</span></div>
+          <div class="stack-item"><strong>版本管理</strong><span>Schema 版本、数据快照、回滚能力</span></div>
+          <div class="stack-item"><strong>窗口聚合</strong><span>时间窗口、滑动窗口、滚动窗口</span></div>
+          <div class="stack-item"><strong>审计日志</strong><span>数据变更、访问记录、合规审计</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">数据源配置</div>
+        <div class="ont-desc muted">配置各类数据源的连接参数与采集规则</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>数据源名称</label>
+            <input v-model="dataSourceName" placeholder="如 雨量站-001" />
+          </div>
+          <div class="form-row">
+            <label>数据源类型</label>
+            <select v-model="dataSourceType">
+              <option>雨量</option>
+              <option>雷达</option>
+              <option>水位</option>
+              <option>泵站</option>
+              <option>路况</option>
+              <option>事件</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>连接方式</label>
+            <select v-model="dataSourceConn">
+              <option>HTTP/API</option>
+              <option>MQTT</option>
+              <option>FTP/SFTP</option>
+              <option>数据库直连</option>
+              <option>消息队列</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>采集频率</label>
+            <input v-model="dataSourceFreq" placeholder="如 5分钟、1小时" />
+          </div>
+          <button @click="addDataSource">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(ds, idx) in dataSources" :key="idx" class="ont-item">
+            <div><strong>{{ ds.name }}</strong> <span class="muted">({{ ds.type }})</span></div>
+            <div class="muted">连接：{{ ds.conn }}｜频率：{{ ds.freq }}</div>
+          </div>
+          <div v-if="dataSources.length === 0" class="muted">尚未添加数据源（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">存储层配置</div>
+        <div class="ont-desc muted">配置 Raw/ODS/TSDB 的存储策略与路由规则</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>数据源</label>
+            <select v-model="storageSource">
+              <option>雨量站-001</option>
+              <option>雷达-001</option>
+              <option>水位站-001</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>存储层</label>
+            <select v-model="storageLayer">
+              <option>Raw（原始层）</option>
+              <option>ODS（明细层）</option>
+              <option>TSDB（时序层）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>清洗规则</label>
+            <textarea v-model="storageRule" rows="2" placeholder="如：去重、单位转换、异常值过滤"></textarea>
+          </div>
+          <button @click="addStorageRule">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(s, idx) in storageRules" :key="idx" class="ont-item">
+            <div><strong>{{ s.source }}</strong> → <strong>{{ s.layer }}</strong></div>
+            <div class="muted">{{ s.rule }}</div>
+          </div>
+          <div v-if="storageRules.length === 0" class="muted">尚未添加存储规则（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">DQ 规则配置</div>
+        <div class="ont-desc muted">配置数据质量校验规则与标签策略</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>数据源/表</label>
+            <input v-model="dqTarget" placeholder="如 雨量站-001" />
+          </div>
+          <div class="form-row">
+            <label>DQ 维度</label>
+            <select v-model="dqDimension">
+              <option>完整性</option>
+              <option>及时性</option>
+              <option>一致性</option>
+              <option>准确性</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>校验规则</label>
+            <textarea v-model="dqRule" rows="2" placeholder="如：字段非空、延迟<5分钟、值域[0,200]"></textarea>
+          </div>
+          <button @click="addDqRule">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(dq, idx) in dqRules" :key="idx" class="ont-item">
+            <div><strong>{{ dq.target }}</strong> <span class="muted">({{ dq.dimension }})</span></div>
+            <div class="muted">{{ dq.rule }}</div>
+          </div>
+          <div v-if="dqRules.length === 0" class="muted">尚未添加 DQ 规则（演示本地态）。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
     <p class="muted">说明：当前演示页不变，本页用于展示语义/本体层的技术方案示意。</p>
@@ -436,7 +594,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "ontology">("main");
+const activePage = ref<"main" | "data" | "ontology">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -450,6 +608,23 @@ const ontologyRelTo = ref("pump-station");
 const ontologyRelType = ref("供排水关联");
 const ontologyRelDesc = ref("路段关联附近泵站用于排涝");
 const ontologyRelations = ref<{ from: string; to: string; type: string; desc: string }[]>([]);
+
+// 数据接入与治理演示（前端本地状态）
+const dataSourceName = ref("雨量站-001");
+const dataSourceType = ref("雨量");
+const dataSourceConn = ref("HTTP/API");
+const dataSourceFreq = ref("5分钟");
+const dataSources = ref<{ name: string; type: string; conn: string; freq: string }[]>([]);
+
+const storageSource = ref("雨量站-001");
+const storageLayer = ref("Raw（原始层）");
+const storageRule = ref("去重、单位统一为 mm/h");
+const storageRules = ref<{ source: string; layer: string; rule: string }[]>([]);
+
+const dqTarget = ref("雨量站-001");
+const dqDimension = ref("完整性");
+const dqRule = ref("字段非空、延迟<5分钟");
+const dqRules = ref<{ target: string; dimension: string; rule: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -585,6 +760,31 @@ function addOntologyRelation() {
     to: ontologyRelTo.value.trim() || "B",
     type: ontologyRelType.value.trim() || "关系",
     desc: ontologyRelDesc.value.trim(),
+  });
+}
+
+function addDataSource() {
+  dataSources.value.unshift({
+    name: dataSourceName.value.trim() || "未命名",
+    type: dataSourceType.value,
+    conn: dataSourceConn.value,
+    freq: dataSourceFreq.value.trim() || "未设置",
+  });
+}
+
+function addStorageRule() {
+  storageRules.value.unshift({
+    source: storageSource.value,
+    layer: storageLayer.value,
+    rule: storageRule.value.trim() || "无规则",
+  });
+}
+
+function addDqRule() {
+  dqRules.value.unshift({
+    target: dqTarget.value.trim() || "未指定",
+    dimension: dqDimension.value,
+    rule: dqRule.value.trim() || "无规则",
   });
 }
 
