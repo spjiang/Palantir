@@ -1366,6 +1366,104 @@
     <h3>系统架构总结（L0-L6）</h3>
     <p class="muted">本页展示应急安全AI操作系统的完整架构层次（L0-L6），并从数据清单、语义建模、AI应用、飞轮效应、Token消耗等维度进行总结。</p>
     
+    <div class="arch-diagram">
+      <div class="arch-diagram-title">系统整体架构图</div>
+      <div class="arch-layers">
+        <div class="arch-layer-item layer-l0">
+          <div class="layer-box">
+            <div class="layer-id">L0</div>
+            <div class="layer-name">界面层</div>
+            <div class="layer-desc">Vue3 前端界面<br/>风险热力图、智能体对话、战报展示</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l1">
+          <div class="layer-box">
+            <div class="layer-id">L1</div>
+            <div class="layer-name">数据接入与治理</div>
+            <div class="layer-desc">Raw/ODS/TSDB 数据存储<br/>数据质量检测、特征提取</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l2">
+          <div class="layer-box">
+            <div class="layer-id">L2</div>
+            <div class="layer-name">语义与状态（本体）</div>
+            <div class="layer-desc">Neo4j/JanusGraph/RDF<br/>知识图谱、实体关系、状态快照</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l3">
+          <div class="layer-box">
+            <div class="layer-id">L3</div>
+            <div class="layer-name">风险推理（模型）</div>
+            <div class="layer-desc">XGBoost/LightGBM/LSTM<br/>风险评分、置信度、解释因子</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l4">
+          <div class="layer-box">
+            <div class="layer-id">L4</div>
+            <div class="layer-name">智能体决策</div>
+            <div class="layer-desc">LLM + RAG + Function Calling<br/>任务包编排、责任归属推理</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l5">
+          <div class="layer-box">
+            <div class="layer-id">L5</div>
+            <div class="layer-name">执行闭环（工作流）</div>
+            <div class="layer-desc">Camunda/Zeebe/Conductor<br/>任务分派、状态跟踪、审批流程</div>
+          </div>
+          <div class="layer-arrow">↓</div>
+        </div>
+        
+        <div class="arch-layer-item layer-l6">
+          <div class="layer-box">
+            <div class="layer-id">L6</div>
+            <div class="layer-name">战报与追溯</div>
+            <div class="layer-desc">TimelineEvent/ObjectState<br/>时间线构建、指标计算、报告生成</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="arch-data-flow">
+        <div class="flow-title">数据流向</div>
+        <div class="flow-items">
+          <div class="flow-item">
+            <span class="flow-label">数据采集</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L1 数据治理</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L2 语义建模</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L3 风险推理</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-label">L3 风险评分</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L4 智能体决策</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L5 工作流执行</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-label">L6 战报生成</span>
+          </div>
+          <div class="flow-item">
+            <span class="flow-label">L6 战报数据</span>
+            <span class="flow-arrow">↗</span>
+            <span class="flow-label">L4 RAG 知识库</span>
+            <span class="flow-arrow">↗</span>
+            <span class="flow-label">L0 界面展示</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <div class="summary-field-help">
       <div class="field-help-title">系统字段说明</div>
       
@@ -2893,6 +2991,137 @@ watch(
 }
 
 /* 总结页面样式 */
+.arch-diagram {
+  margin-bottom: 32px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.8));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+}
+.arch-diagram-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #93c5fd;
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+}
+.arch-layers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+.arch-layer-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 600px;
+}
+.layer-box {
+  width: 100%;
+  padding: 16px 20px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.3s ease;
+}
+.layer-box:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateX(4px);
+}
+.layer-id {
+  min-width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6, #9333ea);
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+}
+.layer-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.layer-desc {
+  font-size: 12px;
+  color: #9fb2d4;
+  line-height: 1.5;
+  text-align: right;
+}
+.layer-arrow {
+  font-size: 24px;
+  color: rgba(59, 130, 246, 0.5);
+  margin: 4px 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.layer-l0 .layer-box { border-color: rgba(59, 130, 246, 0.4); }
+.layer-l1 .layer-box { border-color: rgba(34, 197, 94, 0.4); }
+.layer-l2 .layer-box { border-color: rgba(251, 191, 36, 0.4); }
+.layer-l3 .layer-box { border-color: rgba(249, 115, 22, 0.4); }
+.layer-l4 .layer-box { border-color: rgba(147, 51, 234, 0.4); }
+.layer-l5 .layer-box { border-color: rgba(236, 72, 153, 0.4); }
+.layer-l6 .layer-box { border-color: rgba(59, 130, 246, 0.4); }
+
+.arch-data-flow {
+  margin-top: 32px;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+  border: 1px dashed rgba(59, 130, 246, 0.3);
+}
+.flow-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.flow-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.flow-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 6px;
+}
+.flow-label {
+  font-size: 13px;
+  color: #cbd5e1;
+  padding: 4px 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+}
+.flow-arrow {
+  font-size: 16px;
+  color: #60a5fa;
+  font-weight: bold;
+}
+
 .summary-field-help {
   margin-bottom: 24px;
   padding: 20px;
