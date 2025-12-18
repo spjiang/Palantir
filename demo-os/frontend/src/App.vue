@@ -8,10 +8,12 @@
       </div>
       <div class="meta tabs">
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
-        <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'">数据接入与治理</button>
-        <button :class="{ active: activePage === 'model' }" @click="activePage = 'model'">风险推理/模型</button>
-        <button :class="{ active: activePage === 'agent' }" @click="activePage = 'agent'">智能体决策</button>
-        <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'">本体/语义选型</button>
+        <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'"> L1 数据接入与治理</button>
+        <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'"> L2 本体/语义选型</button>
+        <button :class="{ active: activePage === 'model' }" @click="activePage = 'model'">L3 风险推理/模型</button>
+        <button :class="{ active: activePage === 'agent' }" @click="activePage = 'agent'">L4 智能体决策</button>
+        <button :class="{ active: activePage === 'workflow' }" @click="activePage = 'workflow'"> L5 执行闭环/工作流</button>
+        
       </div>
     </header>
 
@@ -819,6 +821,259 @@
   </section>
 </main>
 
+<main v-else-if="activePage === 'workflow'" class="grid single">
+  <section class="card wide">
+    <h3>执行闭环（工作流 L5 - 1.7/1.9.5）</h3>
+    <p class="muted">说明：当前演示页不变，本页用于展示执行闭环/工作流层的技术方案与业务节点流程。</p>
+    
+    <div class="flow-diagram">
+      <div class="flow-title">业务流程：任务包接收 → 任务分发 → 执行跟踪 → 证据收集 → 完成确认 → 战报生成</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">任务包接收</div>
+            <div class="step-desc">接收智能体下发的 TaskPack（含 tasks[]、owner_org、SLA、required_evidence）</div>
+            <div class="step-agent muted small">工作流功能：任务包解析、状态初始化、SLA 计时启动</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">任务分发</div>
+            <div class="step-desc">按 owner_org 分发给责任单位/人员，发送通知（短信/APP/系统内）</div>
+            <div class="step-agent muted small">工作流功能：路由规则、通知渠道、分派策略（轮询/负载均衡）</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">执行跟踪</div>
+            <div class="step-desc">实时跟踪任务状态（待处理/进行中/待审核/已完成），SLA 超时告警</div>
+            <div class="step-agent muted small">工作流功能：状态机流转、超时检测、告警推送、进度更新</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-title">证据收集</div>
+            <div class="step-desc">收集 required_evidence（定位/照片/视频/签名），校验完整性</div>
+            <div class="step-agent muted small">工作流功能：文件上传、格式校验、完整性检查、存储归档</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <div class="step-title">完成确认</div>
+            <div class="step-desc">执行人提交完成，需审批的任务触发审批流程，审批通过后标记完成</div>
+            <div class="step-agent muted small">工作流功能：审批流程引擎、多级审批、会签/或签、驳回重办</div>
+          </div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">6</div>
+          <div class="step-content">
+            <div class="step-title">战报生成</div>
+            <div class="step-desc">生成 TimelineEvent（incident_created/alert_event/task_completed），更新对象状态</div>
+            <div class="step-agent muted small">工作流功能：事件聚合、时间线构建、状态快照、数据回写</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack-grid">
+      <div class="stack-card">
+        <div class="stack-title">工作流引擎</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>Camunda</strong><span>BPMN 2.0 标准、流程建模、任务分配</span></div>
+          <div class="stack-item"><strong>Zeebe</strong><span>云原生、高并发、分布式编排</span></div>
+          <div class="stack-item"><strong>Conductor</strong><span>Netflix 开源、任务编排、重试机制</span></div>
+          <div class="stack-item"><strong>Airflow</strong><span>DAG 编排、定时调度、依赖管理</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">状态机 / 流程</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>状态定义</strong><span>待处理 → 进行中 → 待审核 → 已完成 / 已驳回</span></div>
+          <div class="stack-item"><strong>流转规则</strong><span>条件分支、并行网关、事件网关、子流程</span></div>
+          <div class="stack-item"><strong>超时处理</strong><span>SLA 计时、超时告警、自动升级、超时重派</span></div>
+          <div class="stack-item"><strong>异常处理</strong><span>重试策略、失败回退、补偿事务、人工介入</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">通知 / 消息</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>通知渠道</strong><span>短信、APP 推送、系统内消息、邮件</span></div>
+          <div class="stack-item"><strong>消息队列</strong><span>RabbitMQ、Kafka、Redis Streams</span></div>
+          <div class="stack-item"><strong>模板引擎</strong><span>消息模板、变量替换、多语言支持</span></div>
+          <div class="stack-item"><strong>送达确认</strong><span>已读回执、送达状态、重试机制</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">审批 / 会签</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>审批流程</strong><span>单级/多级审批、会签/或签、条件审批</span></div>
+          <div class="stack-item"><strong>审批人</strong><span>固定审批人、动态审批人、代理审批</span></div>
+          <div class="stack-item"><strong>审批动作</strong><span>同意/驳回/转交/加签/撤回</span></div>
+          <div class="stack-item"><strong>审批记录</strong><span>审批历史、意见记录、时间戳、签名</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">证据 / 附件</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>文件存储</strong><span>对象存储（OSS/S3）、CDN 加速、版本管理</span></div>
+          <div class="stack-item"><strong>文件类型</strong><span>图片、视频、文档、定位、签名</span></div>
+          <div class="stack-item"><strong>校验规则</strong><span>格式校验、大小限制、完整性检查、病毒扫描</span></div>
+          <div class="stack-item"><strong>归档策略</strong><span>冷热分离、长期归档、合规保留</span></div>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="stack-title">数据回写</div>
+        <div class="stack-items">
+          <div class="stack-item"><strong>TimelineEvent</strong><span>事件时间线、类型分类、载荷存储</span></div>
+          <div class="stack-item"><strong>ObjectState</strong><span>对象状态快照、版本追溯、历史回放</span></div>
+          <div class="stack-item"><strong>指标统计</strong><span>任务完成率、SLA 达成率、响应时间</span></div>
+          <div class="stack-item"><strong>战报生成</strong><span>事件聚合、时间线构建、报告导出</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ont-grid">
+      <div class="ont-card">
+        <div class="ont-title">工作流定义</div>
+        <div class="ont-desc muted">定义工作流模板（BPMN/JSON/YAML），包含节点、流转条件、超时规则</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>流程名称</label>
+            <input v-model="workflowName" placeholder="如 封控任务流程" />
+          </div>
+          <div class="form-row">
+            <label>流程类型</label>
+            <select v-model="workflowType">
+              <option>任务执行流程</option>
+              <option>审批流程</option>
+              <option>事件响应流程</option>
+              <option>数据采集流程</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>节点定义</label>
+            <textarea v-model="workflowNodes" rows="3" placeholder="如：接收 → 分发 → 执行 → 审核 → 完成"></textarea>
+          </div>
+          <div class="form-row">
+            <label>超时规则（分钟）</label>
+            <input v-model="workflowTimeout" placeholder="如 30" />
+          </div>
+          <div class="form-row">
+            <label>重试策略</label>
+            <textarea v-model="workflowRetry" rows="2" placeholder="如：失败重试3次，间隔5分钟"></textarea>
+          </div>
+          <button @click="addWorkflow">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(w, idx) in workflows" :key="idx" class="ont-item">
+            <div><strong>{{ w.name }}</strong> <span class="muted">({{ w.type }})</span></div>
+            <div class="muted">节点：{{ w.nodes }}｜超时：{{ w.timeout }}分钟</div>
+            <div class="muted small">重试：{{ w.retry }}</div>
+          </div>
+          <div v-if="workflows.length === 0" class="muted">尚未添加工作流（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">通知配置</div>
+        <div class="ont-desc muted">配置通知渠道、模板、触发条件</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>通知名称</label>
+            <input v-model="notificationName" placeholder="如 任务分派通知" />
+          </div>
+          <div class="form-row">
+            <label>通知渠道</label>
+            <select v-model="notificationChannel">
+              <option>短信</option>
+              <option>APP 推送</option>
+              <option>系统内消息</option>
+              <option>邮件</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>触发条件</label>
+            <select v-model="notificationTrigger">
+              <option>任务分派时</option>
+              <option>SLA 超时前</option>
+              <option>任务完成时</option>
+              <option>审批待处理时</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>消息模板</label>
+            <textarea v-model="notificationTemplate" rows="3" placeholder="如：您有新的任务待处理：{task_name}，请在{timeout}分钟内完成"></textarea>
+          </div>
+          <button @click="addNotification">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(n, idx) in notifications" :key="idx" class="ont-item">
+            <div><strong>{{ n.name }}</strong> <span class="muted">({{ n.channel }})</span></div>
+            <div class="muted">触发：{{ n.trigger }}</div>
+            <div class="muted small">模板：{{ n.template }}</div>
+          </div>
+          <div v-if="notifications.length === 0" class="muted">尚未添加通知配置（演示本地态）。</div>
+        </div>
+      </div>
+
+      <div class="ont-card">
+        <div class="ont-title">审批流程配置</div>
+        <div class="ont-desc muted">配置审批流程（审批人、审批规则、审批动作）</div>
+        <div class="ont-form">
+          <div class="form-row">
+            <label>审批流程名称</label>
+            <input v-model="approvalName" placeholder="如 高风险任务审批" />
+          </div>
+          <div class="form-row">
+            <label>审批类型</label>
+            <select v-model="approvalType">
+              <option>单级审批</option>
+              <option>多级审批</option>
+              <option>会签</option>
+              <option>或签</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>审批人</label>
+            <textarea v-model="approvalUsers" rows="2" placeholder="如：部门主管, 分管领导"></textarea>
+          </div>
+          <div class="form-row">
+            <label>审批规则</label>
+            <textarea v-model="approvalRule" rows="2" placeholder="如：高风险任务需部门主管+分管领导会签"></textarea>
+          </div>
+          <div class="form-row">
+            <label>超时处理</label>
+            <select v-model="approvalTimeout">
+              <option>自动通过</option>
+              <option>自动驳回</option>
+              <option>升级审批</option>
+              <option>保持待处理</option>
+            </select>
+          </div>
+          <button @click="addApproval">保存到预览（本地）</button>
+        </div>
+        <div class="ont-list">
+          <div v-for="(a, idx) in approvals" :key="idx" class="ont-item">
+            <div><strong>{{ a.name }}</strong> <span class="muted">({{ a.type }})</span></div>
+            <div class="muted">审批人：{{ a.users }}｜超时：{{ a.timeout }}</div>
+            <div class="muted small">规则：{{ a.rule }}</div>
+          </div>
+          <div v-if="approvals.length === 0" class="muted">尚未添加审批流程（演示本地态）。</div>        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
 <main v-else-if="activePage === 'ontology'" class="grid single">
   <section class="card wide">
     <h3>本体与语义平台选型（新页面）</h3>
@@ -1025,7 +1280,7 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "model" | "agent" | "ontology">("main");
+const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "ontology">("main");
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -1095,6 +1350,27 @@ const taskTemplateSla = ref("20");
 const taskTemplateEvidence = ref("定位, 照片");
 const taskTemplateApproval = ref("是");
 const taskTemplates = ref<{ name: string; type: string; owner: string; sla: string; evidence: string; approval: string }[]>([]);
+
+// 执行闭环/工作流演示（前端本地状态）
+const workflowName = ref("封控任务流程");
+const workflowType = ref("任务执行流程");
+const workflowNodes = ref("接收 → 分发 → 执行 → 审核 → 完成");
+const workflowTimeout = ref("30");
+const workflowRetry = ref("失败重试3次，间隔5分钟");
+const workflows = ref<{ name: string; type: string; nodes: string; timeout: string; retry: string }[]>([]);
+
+const notificationName = ref("任务分派通知");
+const notificationChannel = ref("APP 推送");
+const notificationTrigger = ref("任务分派时");
+const notificationTemplate = ref("您有新的任务待处理：{task_name}，请在{timeout}分钟内完成");
+const notifications = ref<{ name: string; channel: string; trigger: string; template: string }[]>([]);
+
+const approvalName = ref("高风险任务审批");
+const approvalType = ref("多级审批");
+const approvalUsers = ref("部门主管, 分管领导");
+const approvalRule = ref("高风险任务需部门主管+分管领导会签");
+const approvalTimeout = ref("升级审批");
+const approvals = ref<{ name: string; type: string; users: string; rule: string; timeout: string }[]>([]);
 
 const topN = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -1310,6 +1586,35 @@ function addTaskTemplate() {
     sla: taskTemplateSla.value.trim() || "60",
     evidence: taskTemplateEvidence.value.trim() || "无",
     approval: taskTemplateApproval.value,
+  });
+}
+
+function addWorkflow() {
+  workflows.value.unshift({
+    name: workflowName.value.trim() || "未命名",
+    type: workflowType.value,
+    nodes: workflowNodes.value.trim() || "未设置",
+    timeout: workflowTimeout.value.trim() || "60",
+    retry: workflowRetry.value.trim() || "未设置",
+  });
+}
+
+function addNotification() {
+  notifications.value.unshift({
+    name: notificationName.value.trim() || "未命名",
+    channel: notificationChannel.value,
+    trigger: notificationTrigger.value,
+    template: notificationTemplate.value.trim() || "无模板",
+  });
+}
+
+function addApproval() {
+  approvals.value.unshift({
+    name: approvalName.value.trim() || "未命名",
+    type: approvalType.value,
+    users: approvalUsers.value.trim() || "未指定",
+    rule: approvalRule.value.trim() || "无规则",
+    timeout: approvalTimeout.value,
   });
 }
 
