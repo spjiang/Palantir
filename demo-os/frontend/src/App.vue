@@ -21,6 +21,23 @@
 <main class="grid" v-if="activePage === 'main'">
       <section class="card wide">
         <h3>1) 风险热力图（简化为 TopN 列表）</h3>
+        <div class="field-help">
+          <div class="help-title">字段说明</div>
+          <div class="help-content">
+            <div class="help-item">
+              <strong>risk_score（风险分数）</strong>：数值范围 0-10，表示对象的综合风险评分。分数越高表示风险越大，通常 8-10 为高风险（红），6-8 为中高风险（橙），4-6 为中风险（黄），0-4 为低风险（绿）。
+            </div>
+            <div class="help-item">
+              <strong>risk_level（风险等级）</strong>：分为四个等级：<span class="level-chip red">红</span>（高风险）、<span class="level-chip orange">橙</span>（中高风险）、<span class="level-chip yellow">黄</span>（中风险）、<span class="level-chip green">绿</span>（低风险）。等级由 risk_score 映射而来，用于快速识别风险程度。
+            </div>
+            <div class="help-item">
+              <strong>confidence（置信度）</strong>：数值范围 0-1，表示模型对风险评分的置信程度。置信度越高表示模型对评分越有信心，通常基于特征完整性和模型不确定性计算。0.8 以上表示高置信度，0.6-0.8 表示中等置信度，0.6 以下表示低置信度。
+            </div>
+            <div class="help-item">
+              <strong>explain_factors（解释因子）</strong>：字符串数组，列出导致风险评分的主要因素。例如："雨强上升"、"水位超限"、"历史事件"等。这些因子通过 SHAP/LIME 等可解释性方法生成，帮助理解模型决策依据。
+            </div>
+          </div>
+        </div>
         <div class="row">
           <label>区域</label>
           <select v-model="areaId">
@@ -3125,6 +3142,61 @@ watch(
 .help-title {
   font-weight: 600;
   margin-bottom: 6px;
+}
+.field-help {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+}
+.field-help .help-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 10px;
+}
+.field-help .help-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.field-help .help-item {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+.field-help .help-item strong {
+  color: #60a5fa;
+  font-weight: 600;
+}
+.field-help .level-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 0 2px;
+}
+.field-help .level-chip.red {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+.field-help .level-chip.orange {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+  border: 1px solid rgba(249, 115, 22, 0.4);
+}
+.field-help .level-chip.yellow {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+.field-help .level-chip.green {
+  background: rgba(21, 128, 61, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(21, 128, 61, 0.4);
 }
 .help-grid {
   display: grid;
