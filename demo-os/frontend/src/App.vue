@@ -734,6 +734,45 @@ watch(
 .grid.single {
   grid-template-columns: 1fr;
 }
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.stack-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.stack-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #e5ecff;
+}
+.stack-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stack-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.stack-item strong {
+  color: #e5ecff;
+  font-size: 13px;
+}
+.stack-item span {
+  color: #9fb2d4;
+  font-size: 12px;
+}
 .ont-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
