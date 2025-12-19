@@ -313,22 +313,22 @@ def seed_demo_data():
                     "drainage_capacity": 0.8 if high_risk else 1.0 + (i % 3) * 0.2,
                     "elevation_m": 2.5 if high_risk else 5.0 - i * 0.2,
                 }
-                s.add(
-                    ObjectState(
-                        object_id=oid,
-                        object_type="road_segment",
-                        area_id=area_id,
+            s.add(
+                ObjectState(
+                    object_id=oid,
+                    object_type="road_segment",
+                    area_id=area_id,
                         attrs={"name": f"路段{i}", "admin_area": admin_area, "elevation_m": features["elevation_m"], "drainage_capacity": features["drainage_capacity"]},
                         features=features,
-                        dq_tags={"freshness": 0.95, "validity": True},
-                        updated_at=now,
-                    )
+                    dq_tags={"freshness": 0.95, "validity": True},
+                    updated_at=now,
                 )
+            )
 
             # 默认事件与预警
             inc = Incident(area_id=area_id, title=f"{admin_area} 暴雨内涝处置事件（演示）", status="open")
-            s.add(inc)
-            s.flush()
+        s.add(inc)
+        s.flush()
             s.add(
                 TimelineEvent(
                     id=f"tl-{uuid4().hex}",
@@ -337,15 +337,15 @@ def seed_demo_data():
                     payload={"title": inc.title},
                 )
             )
-            s.add(
-                AlertEvent(
-                    incident_id=inc.id,
-                    area_id=area_id,
+        s.add(
+            AlertEvent(
+                incident_id=inc.id,
+                area_id=area_id,
                     level="红" if area_id == "A-002" else "橙",
-                    reason="雨强上升+低洼路段风险提升",
-                    created_at=now - timedelta(minutes=5),
-                )
+                reason="雨强上升+低洼路段风险提升",
+                created_at=now - timedelta(minutes=5),
             )
+        )
             s.add(
                 TimelineEvent(
                     id=f"tl-{uuid4().hex}",

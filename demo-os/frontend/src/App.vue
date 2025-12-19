@@ -52,31 +52,31 @@
             <div class="map-hint muted">示例坐标基于重庆城区，按风险色彩/大小呈现 TopN 点位；点击点位或列表联动。</div>
           </div>
           <div class="list-card">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>对象</th>
-                  <th>等级</th>
-                  <th>分数</th>
-                  <th>置信度</th>
-                  <th>解释因子</th>
-                </tr>
-              </thead>
-              <tbody>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>对象</th>
+              <th>等级</th>
+              <th>分数</th>
+              <th>置信度</th>
+              <th>解释因子</th>
+            </tr>
+          </thead>
+          <tbody>
                 <tr
                   v-for="it in topN"
                   :key="it.target_id"
                   @click="pickTarget(it.target_id)"
                   :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
                 >
-                  <td>{{ it.target_id }}</td>
-                  <td>{{ it.risk_level }}</td>
-                  <td>{{ it.risk_score.toFixed(2) }}</td>
-                  <td>{{ it.confidence.toFixed(2) }}</td>
-                  <td class="muted">{{ (it.explain_factors || []).slice(0, 3).join(" / ") }}</td>
-                </tr>
-              </tbody>
-            </table>
+              <td>{{ it.target_id }}</td>
+              <td>{{ it.risk_level }}</td>
+              <td>{{ it.risk_score.toFixed(2) }}</td>
+              <td>{{ it.confidence.toFixed(2) }}</td>
+              <td class="muted">{{ (it.explain_factors || []).slice(0, 3).join(" / ") }}</td>
+            </tr>
+          </tbody>
+        </table>
           </div>
         </div>
         <div class="summary-tiles">
@@ -248,7 +248,7 @@
         </div>
         <div class="box">
           <div class="muted">原始 JSON：</div>
-          <pre class="pre">{{ reportOut }}</pre>
+        <pre class="pre">{{ reportOut }}</pre>
         </div>
       </section>
     </main>
@@ -1675,6 +1675,392 @@
           </div>
         </div>
       </div>
+      
+      <div class="l4-l5-linkage">
+        <div class="linkage-title">L4 智能体决策 ↔ L5 执行闭环：联动关系与节点使用</div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">1. 数据传递接口</div>
+          <div class="linkage-content">
+            <div class="linkage-item">
+              <div class="item-title">API 接口：任务包下发</div>
+              <div class="item-desc">
+                <strong>接口路径</strong>：<code>POST /workflow/taskpack</code><br/>
+                <strong>请求方式</strong>：HTTP POST<br/>
+                <strong>Content-Type</strong>：application/json<br/>
+                <strong>调用方</strong>：L4 智能体决策层<br/>
+                <strong>接收方</strong>：L5 工作流引擎
+              </div>
+            </div>
+            
+            <div class="linkage-item">
+              <div class="item-title">请求体结构（TaskPack JSON）</div>
+              <pre class="code-block">{
+  "incident_id": "inc-1766020476806",
+  "title": "江北新区 暴雨内涝处置事件",
+  "created_at": "2025-12-18T01:14:36Z",
+  "status": "pending",
+  "tasks": [
+    {
+      "task_id": "task-001",
+      "task_type": "封控准备",
+      "target_object_id": "a-001-road-001",
+      "description": "对路段1进行封控准备",
+      "owner_org": "交警",
+      "sla_minutes": 20,
+      "required_evidence": ["定位", "照片", "视频"],
+      "need_approval": true,
+      "approval_flow": "高风险任务审批",
+      "priority": "high"
+    }
+  ],
+  "metadata": {
+    "rag_sources": ["应急预案-封控流程"],
+    "reasoning": "基于风险等级'红'生成任务包",
+    "confidence": 0.88
+  }
+}</pre>
+            </div>
+            
+            <div class="linkage-item">
+              <div class="item-title">响应体结构</div>
+              <pre class="code-block">{
+  "success": true,
+  "taskpack_id": "tp-1766020476806",
+  "workflow_instance_id": "wf-instance-001",
+  "tasks_created": 2,
+  "message": "任务包已成功创建并启动工作流"
+}</pre>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">2. 工作流节点使用</div>
+          <div class="linkage-content">
+            <div class="node-diagram">
+              <div class="node-flow">
+                <div class="node-item start-node">
+                  <div class="node-label">开始节点</div>
+                  <div class="node-desc">接收 TaskPack<br/>解析任务列表</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item gateway-node">
+                  <div class="node-label">并行网关</div>
+                  <div class="node-desc">并行创建多个任务实例<br/>tasks[] 数组遍历</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item task-node">
+                  <div class="node-label">任务分派节点</div>
+                  <div class="node-desc">根据 owner_org 分派<br/>发送通知（短信/APP）</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item condition-node">
+                  <div class="node-label">条件判断</div>
+                  <div class="node-desc">判断 need_approval<br/>true → 审批流程<br/>false → 直接执行</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item approval-node">
+                  <div class="node-label">审批节点</div>
+                  <div class="node-desc">根据 approval_flow<br/>触发审批流程<br/>（多级审批/会签）</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item execution-node">
+                  <div class="node-label">执行节点</div>
+                  <div class="node-desc">任务执行<br/>收集证据<br/>状态更新</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item timer-node">
+                  <div class="node-label">SLA 计时节点</div>
+                  <div class="node-desc">启动 SLA 计时<br/>sla_minutes 倒计时<br/>超时告警</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item evidence-node">
+                  <div class="node-label">证据校验节点</div>
+                  <div class="node-desc">校验 required_evidence<br/>完整性检查<br/>格式验证</div>
+                </div>
+                <div class="node-arrow">→</div>
+                <div class="node-item end-node">
+                  <div class="node-label">结束节点</div>
+                  <div class="node-desc">任务完成<br/>生成 TimelineEvent<br/>更新 ObjectState</div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="linkage-item">
+              <div class="item-title">节点详细说明</div>
+              <div class="node-details">
+                <div class="node-detail-item">
+                  <strong>开始节点</strong>：接收 L4 下发的 TaskPack，解析 JSON 结构，提取 tasks[] 数组，初始化工作流实例。
+                </div>
+                <div class="node-detail-item">
+                  <strong>并行网关</strong>：遍历 tasks[] 数组，为每个任务创建独立的工作流实例，实现并行处理多个任务。
+                </div>
+                <div class="node-detail-item">
+                  <strong>任务分派节点</strong>：根据 tasks[].owner_org 字段，将任务分派给对应的责任单位，通过短信/APP推送/系统内消息发送通知。
+                </div>
+                <div class="node-detail-item">
+                  <strong>条件判断节点</strong>：检查 tasks[].need_approval 字段，true 则进入审批流程，false 则直接进入执行节点。
+                </div>
+                <div class="node-detail-item">
+                  <strong>审批节点</strong>：根据 tasks[].approval_flow 字段，加载对应的审批流程模板（多级审批/会签/或签），等待审批人处理。
+                </div>
+                <div class="node-detail-item">
+                  <strong>执行节点</strong>：任务执行阶段，责任单位/人员执行任务，实时更新任务状态（待处理→进行中→待审核）。
+                </div>
+                <div class="node-detail-item">
+                  <strong>SLA 计时节点</strong>：根据 tasks[].sla_minutes 字段启动倒计时，超时触发告警，自动升级任务优先级。
+                </div>
+                <div class="node-detail-item">
+                  <strong>证据校验节点</strong>：校验 tasks[].required_evidence 数组中的证据类型是否全部提交，格式是否正确，完整性是否满足要求。
+                </div>
+                <div class="node-detail-item">
+                  <strong>结束节点</strong>：任务完成，生成 TimelineEvent（type: "task_completed"），更新 ObjectState 状态快照，触发 L6 战报生成。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">3. 状态同步机制</div>
+          <div class="linkage-content">
+            <div class="sync-flow">
+              <div class="sync-item">
+                <div class="sync-title">L4 → L5：任务包下发</div>
+                <div class="sync-desc">
+                  <strong>触发时机</strong>：L4 智能体生成 TaskPack 后立即调用<br/>
+                  <strong>数据内容</strong>：完整的 TaskPack JSON（含 tasks[]、owner_org、SLA、required_evidence、need_approval）<br/>
+                  <strong>处理方式</strong>：L5 工作流引擎解析 TaskPack，创建工作流实例，启动任务分派
+                </div>
+              </div>
+              
+              <div class="sync-item">
+                <div class="sync-title">L5 → L4：状态回调（可选）</div>
+                <div class="sync-desc">
+                  <strong>触发时机</strong>：任务状态变更时（待处理→进行中→已完成）<br/>
+                  <strong>数据内容</strong>：任务状态更新通知（task_id、status、updated_at）<br/>
+                  <strong>处理方式</strong>：L4 智能体可记录任务执行状态，用于后续优化
+                </div>
+              </div>
+              
+              <div class="sync-item">
+                <div class="sync-title">L5 → L6：事件生成</div>
+                <div class="sync-desc">
+                  <strong>触发时机</strong>：任务完成、状态变更、审批通过时<br/>
+                  <strong>数据内容</strong>：TimelineEvent（incident_id、type、payload、created_at）<br/>
+                  <strong>处理方式</strong>：L6 战报层接收事件，构建时间线，生成战报
+                </div>
+              </div>
+              
+              <div class="sync-item">
+                <div class="sync-title">L6 → L4：知识库回馈</div>
+                <div class="sync-desc">
+                  <strong>触发时机</strong>：战报生成后，异步写入知识库<br/>
+                  <strong>数据内容</strong>：历史战报文档（事件标题、处置过程、任务执行结果）<br/>
+                  <strong>处理方式</strong>：L4 RAG 知识库向量化存储，供后续检索使用
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">4. 关键字段映射关系</div>
+          <div class="linkage-content">
+            <div class="mapping-table">
+              <table class="linkage-table">
+                <thead>
+                  <tr>
+                    <th>L4 智能体决策字段</th>
+                    <th>L5 工作流节点使用</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>tasks[].task_id</code></td>
+                    <td>任务实例ID</td>
+                    <td>工作流中每个任务实例的唯一标识</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].task_type</code></td>
+                    <td>任务类型节点</td>
+                    <td>用于路由到不同的任务处理流程</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].owner_org</code></td>
+                    <td>任务分派节点</td>
+                    <td>确定任务分派给哪个责任单位</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].sla_minutes</code></td>
+                    <td>SLA 计时节点</td>
+                    <td>设置任务完成时限，超时触发告警</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].required_evidence</code></td>
+                    <td>证据校验节点</td>
+                    <td>校验任务完成时必须提交的证据类型</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].need_approval</code></td>
+                    <td>条件判断节点</td>
+                    <td>决定是否进入审批流程</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].approval_flow</code></td>
+                    <td>审批节点</td>
+                    <td>指定使用的审批流程模板</td>
+                  </tr>
+                  <tr>
+                    <td><code>tasks[].priority</code></td>
+                    <td>优先级队列</td>
+                    <td>影响任务分派的优先级顺序</td>
+                  </tr>
+                  <tr>
+                    <td><code>incident_id</code></td>
+                    <td>事件关联</td>
+                    <td>关联所有任务到同一个事件</td>
+                  </tr>
+                  <tr>
+                    <td><code>metadata.rag_sources</code></td>
+                    <td>追溯信息</td>
+                    <td>记录任务包生成的依据来源</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">5. 错误处理与重试机制</div>
+          <div class="linkage-content">
+            <div class="error-handling">
+              <div class="error-item">
+                <div class="error-title">L4 调用 L5 失败</div>
+                <div class="error-desc">
+                  <strong>场景</strong>：L4 调用 <code>POST /workflow/taskpack</code> 失败（网络错误、服务不可用）<br/>
+                  <strong>处理</strong>：
+                  <ul>
+                    <li>L4 本地缓存 TaskPack，标记为"待下发"状态</li>
+                    <li>启动重试机制：指数退避重试（1分钟、2分钟、4分钟...）</li>
+                    <li>重试 3 次后仍失败，记录错误日志，通知管理员</li>
+                    <li>管理员可手动触发重新下发</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div class="error-item">
+                <div class="error-title">L5 解析 TaskPack 失败</div>
+                <div class="error-desc">
+                  <strong>场景</strong>：L5 接收到的 TaskPack JSON 格式错误、必填字段缺失<br/>
+                  <strong>处理</strong>：
+                  <ul>
+                    <li>L5 返回 400 Bad Request，包含详细错误信息</li>
+                    <li>L4 接收错误响应，记录错误日志</li>
+                    <li>L4 可尝试修复数据后重新下发，或通知用户重新生成任务包</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div class="error-item">
+                <div class="error-title">任务执行超时</div>
+                <div class="error-desc">
+                  <strong>场景</strong>：任务超过 SLA 时限未完成<br/>
+                  <strong>处理</strong>：
+                  <ul>
+                    <li>L5 SLA 计时节点触发超时事件</li>
+                    <li>自动升级：通知上级主管，提升任务优先级</li>
+                    <li>生成 TimelineEvent（type: "task_timeout"）</li>
+                    <li>L6 战报层记录超时事件，影响 SLA 达成率指标</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">6. 工作流配置示例（BPMN/JSON）</div>
+          <div class="linkage-content">
+            <div class="linkage-item">
+              <div class="item-title">BPMN 2.0 工作流定义示例</div>
+              <div class="item-desc">
+                工作流引擎（如 Camunda）使用 BPMN 2.0 标准定义流程，L4 下发的 TaskPack 数据会映射到工作流的流程变量中。
+              </div>
+              <pre class="code-block">// 工作流流程变量（Process Variables）
+{
+  "taskpack": {
+    "incident_id": "inc-1766020476806",
+    "tasks": [...]
+  },
+  "current_task": {
+    "task_id": "task-001",
+    "owner_org": "交警",
+    "sla_minutes": 20,
+    "required_evidence": ["定位", "照片", "视频"],
+    "need_approval": true
+  }
+}
+
+// BPMN 节点配置示例
+- 开始节点：接收 taskpack 变量
+- 并行网关：遍历 taskpack.tasks[]，为每个任务创建子流程
+- 任务分派节点：使用 current_task.owner_org 分派任务
+- 条件判断：检查 current_task.need_approval
+- SLA 计时节点：设置定时器，时长 = current_task.sla_minutes 分钟
+- 证据校验节点：校验 current_task.required_evidence 数组</pre>
+            </div>
+            
+            <div class="linkage-item">
+              <div class="item-title">工作流实例创建</div>
+              <div class="item-desc">
+                当 L4 调用 <code>POST /workflow/taskpack</code> 时，L5 工作流引擎会：
+                <ul>
+                  <li>解析 TaskPack JSON，提取所有字段</li>
+                  <li>创建工作流实例（Workflow Instance），关联 incident_id</li>
+                  <li>为每个任务（tasks[]）创建子流程实例</li>
+                  <li>将任务字段映射到流程变量（Process Variables）</li>
+                  <li>启动工作流执行，进入第一个节点（开始节点）</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="linkage-section">
+          <div class="linkage-subtitle">7. 联动时序图</div>
+          <div class="linkage-content">
+            <div class="sequence-diagram">
+              <pre class="code-block">L4 智能体决策          L5 工作流引擎          L6 战报层
+    |                      |                      |
+    |--1. POST /workflow/taskpack-->|                      |
+    |   (TaskPack JSON)     |                      |
+    |                      |--2. 解析 TaskPack    |
+    |                      |--3. 创建工作流实例   |
+    |                      |--4. 启动任务分派     |
+    |                      |                      |
+    |<--5. 响应 (taskpack_id)---|                      |
+    |                      |                      |
+    |                      |--6. 任务状态变更     |
+    |                      |--7. 生成 TimelineEvent-->|
+    |                      |                      |
+    |                      |--8. 任务完成         |
+    |                      |--9. 生成 TimelineEvent-->|
+    |                      |                      |
+    |                      |                      |--10. 构建时间线
+    |                      |                      |--11. 生成战报
+    |                      |                      |
+    |                      |<--12. 战报数据回馈----|
+    |                      |                      |
+    |--13. RAG 知识库更新--|                      |
+    |   (异步)              |                      |</pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div class="summary-field-help">
@@ -2431,8 +2817,8 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
         </div>
       </div>
     </div>
-  </section>
-</main>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -3444,6 +3830,291 @@ watch(
   font-size: 20px;
   color: rgba(147, 51, 234, 0.6);
   margin: 4px 0;
+}
+
+.l4-l5-linkage {
+  margin-top: 32px;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(236, 72, 153, 0.3);
+  border-radius: 12px;
+}
+.linkage-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f472b6;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(236, 72, 153, 0.3);
+  text-align: center;
+}
+.linkage-section {
+  margin-bottom: 32px;
+}
+.linkage-section:last-child {
+  margin-bottom: 0;
+}
+.linkage-subtitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f9a8d4;
+  margin-bottom: 16px;
+  padding-left: 12px;
+  border-left: 3px solid rgba(236, 72, 153, 0.5);
+}
+.linkage-content {
+  padding-left: 20px;
+}
+.linkage-item {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+  border-radius: 6px;
+}
+.item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f9a8d4;
+  margin-bottom: 8px;
+}
+.item-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.item-desc code {
+  background: rgba(236, 72, 153, 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  color: #f9a8d4;
+}
+
+.node-diagram {
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.node-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: fit-content;
+}
+.node-item {
+  min-width: 120px;
+  padding: 12px;
+  background: rgba(236, 72, 153, 0.1);
+  border: 2px solid rgba(236, 72, 153, 0.3);
+  border-radius: 6px;
+  text-align: center;
+}
+.node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f9a8d4;
+  margin-bottom: 6px;
+}
+.node-desc {
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+.node-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.node-detail-item {
+  padding: 10px 12px;
+  background: rgba(236, 72, 153, 0.05);
+  border-left: 2px solid rgba(236, 72, 153, 0.3);
+  border-radius: 4px;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.node-detail-item strong {
+  color: #f9a8d4;
+  font-weight: 600;
+}
+.node-arrow {
+  font-size: 18px;
+  color: rgba(236, 72, 153, 0.6);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.start-node {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.start-node .node-label {
+  color: #86efac;
+}
+.gateway-node {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+.gateway-node .node-label {
+  color: #fde047;
+}
+.task-node {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.task-node .node-label {
+  color: #93c5fd;
+}
+.condition-node {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.3);
+}
+.condition-node .node-label {
+  color: #fdba74;
+}
+.approval-node {
+  background: rgba(147, 51, 234, 0.1);
+  border-color: rgba(147, 51, 234, 0.3);
+}
+.approval-node .node-label {
+  color: #c4b5fd;
+}
+.execution-node {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.execution-node .node-label {
+  color: #93c5fd;
+}
+.timer-node {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+.timer-node .node-label {
+  color: #fca5a5;
+}
+.evidence-node {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.evidence-node .node-label {
+  color: #86efac;
+}
+.end-node {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.end-node .node-label {
+  color: #86efac;
+}
+
+.sync-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sync-item {
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.4);
+  border-left: 3px solid rgba(236, 72, 153, 0.5);
+  border-radius: 4px;
+}
+.sync-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f9a8d4;
+  margin-bottom: 8px;
+}
+.sync-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.sync-desc strong {
+  color: #f9a8d4;
+}
+.sync-desc ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+.sync-desc li {
+  margin-bottom: 4px;
+}
+
+.mapping-table {
+  overflow-x: auto;
+}
+.linkage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.linkage-table thead {
+  background: rgba(236, 72, 153, 0.2);
+}
+.linkage-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #f9a8d4;
+  border-bottom: 2px solid rgba(236, 72, 153, 0.3);
+}
+.linkage-table td {
+  padding: 10px 12px;
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(236, 72, 153, 0.1);
+}
+.linkage-table tbody tr:hover {
+  background: rgba(236, 72, 153, 0.05);
+}
+.linkage-table code {
+  background: rgba(236, 72, 153, 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  color: #f9a8d4;
+}
+
+.error-handling {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.error-item {
+  padding: 16px;
+  background: rgba(220, 38, 38, 0.1);
+  border-left: 3px solid rgba(220, 38, 38, 0.5);
+  border-radius: 4px;
+}
+.error-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fca5a5;
+  margin-bottom: 8px;
+}
+.error-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+.error-desc strong {
+  color: #fca5a5;
+}
+.error-desc ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+.error-desc li {
+  margin-bottom: 4px;
+}
+
+.sequence-diagram {
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 6px;
 }
 
 .summary-field-help {
