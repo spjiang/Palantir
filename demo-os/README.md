@@ -44,7 +44,9 @@ docker compose up -d --build
 - 智能体服务：`http://<PUBLIC_HOST>:7001/docs`
 - 小模型服务：`http://<PUBLIC_HOST>:7002/docs`
 
-## 常见报错：`KeyError: 'ContainerConfig'`
+## 常见报错
+
+### `KeyError: 'ContainerConfig'`
 
 如果你看到类似：
 
@@ -63,6 +65,48 @@ docker compose version
 docker compose down --remove-orphans
 docker compose up -d --build
 ```
+
+### `getaddrinfo EAI_AGAIN api` (前端代理错误)
+
+如果前端日志出现：
+
+```
+[vite] http proxy error: /risk/topn?area_id=A-001&n=12
+Error: getaddrinfo EAI_AGAIN api
+```
+
+这表示前端容器无法解析 `api` 服务名，可能原因：
+
+1. **API 服务未启动**：检查 API 服务是否正常运行
+   ```bash
+   docker compose ps
+   docker compose logs api
+   ```
+
+2. **网络问题**：确保所有服务在同一 Docker 网络
+   ```bash
+   # 重新构建并启动所有服务
+   docker compose down
+   docker compose up -d --build
+   
+   # 等待所有服务就绪（特别是 API 服务的健康检查）
+   docker compose ps
+   ```
+
+3. **服务启动顺序**：前端依赖 API 服务，确保 API 服务先启动
+   ```bash
+   # 先启动 API 服务
+   docker compose up -d api
+   
+   # 等待 API 健康检查通过后，再启动前端
+   docker compose up -d frontend
+   ```
+
+4. **检查服务连通性**：在前端容器内测试
+   ```bash
+   docker compose exec frontend ping api
+   docker compose exec frontend wget -O- http://api:8000/health
+   ```
 
 ## 演示闭环（对应 V7 1.1）
 

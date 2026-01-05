@@ -48,12 +48,29 @@ services:
         condition: service_started
     ports:
       - "7000:8000"
+    healthcheck:
+      # api 镜像不保证自带 curl/wget，因此用 python 标准库探活
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - default
+    extra_hosts:
+      # 让容器内可解析 host.docker.internal（Linux 也适用）
+      - "host.docker.internal:host-gateway"
 
   agent:
     build:
       context: ./services/agent
     environment:
-      API_BASE_URL: http://api:8000
+      # 如遇 compose 内 DNS 偶发异常（EAI_AGAIN api），可走宿主机回环端口
+      API_BASE_URL: ${API_BASE_URL:-http://host.docker.internal:7000}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-sk-0d31b8fc202245b69bc189f4f80bc4e8}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
@@ -62,6 +79,10 @@ services:
         condition: service_started
     ports:
       - "7001:8001"
+    networks:
+      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:
@@ -73,13 +94,20 @@ services:
       # export VITE_AGENT_BASE_URL="http://10.156.196.228:7001"
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-/api}"
       VITE_AGENT_BASE_URL: "${VITE_AGENT_BASE_URL:-/agent}"
+      # Vite dev server 的代理目标：默认走 host.docker.internal:7000/7001，绕开 “api/agent” DNS
+      VITE_PROXY_API_TARGET: "${VITE_PROXY_API_TARGET:-http://host.docker.internal:7000}"
+      VITE_PROXY_AGENT_TARGET: "${VITE_PROXY_AGENT_TARGET:-http://host.docker.internal:7001}"
     ports:
       - "7080:8080"
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
       agent:
         condition: service_started
+    networks:
+      - default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pgdata:

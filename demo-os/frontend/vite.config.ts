@@ -12,14 +12,33 @@ export default defineConfig({
      */
     proxy: {
       "/api": {
-        target: "http://api:8000",
+        // 优先走 compose 服务名；如遇 DNS 异常（EAI_AGAIN），可在 compose 里改为：
+        // VITE_PROXY_API_TARGET=http://host.docker.internal:7000
+        target: process.env.VITE_PROXY_API_TARGET || "http://api:8000",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
+        configure: (proxy, _options) => {
+          proxy.on("error", (err, _req, res) => {
+            console.log("proxy error", err);
+          });
+          proxy.on("proxyReq", (proxyReq, req, _res) => {
+            console.log("Sending Request to the Target:", req.method, req.url);
+          });
+          proxy.on("proxyRes", (proxyRes, req, _res) => {
+            console.log("Received Response from the Target:", proxyRes.statusCode, req.url);
+          });
+        },
       },
       "/agent": {
-        target: "http://agent:8001",
+        // VITE_PROXY_AGENT_TARGET=http://host.docker.internal:7001
+        target: process.env.VITE_PROXY_AGENT_TARGET || "http://agent:8001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/agent/, ""),
+        configure: (proxy, _options) => {
+          proxy.on("error", (err, _req, res) => {
+            console.log("proxy error", err);
+          });
+        },
       },
     },
   },
