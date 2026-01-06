@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "axios": "^1.7.9",
-    "vue": "^3.5.12",
-    "leaflet": "^1.9.4"
+    "cytoscape": "^3.28.1",
+    "leaflet": "^1.9.4",
+    "vue": "^3.5.12"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
@@ -19,5 +20,3 @@
     "vite": "^6.0.3"
   }
 }
-
-

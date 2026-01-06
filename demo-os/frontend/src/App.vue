@@ -3397,6 +3397,11 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
 
           <div class="ont-preview">
             <div class="ont-title">关系预览 / 校验</div>
+            <div class="ont-preview-actions">
+              <button class="btn tiny ghost" @click="ontologyGraphRelayout">重新布局</button>
+              <button class="btn tiny ghost" @click="ontologyGraphFit">适配视图</button>
+            </div>
+            <div class="ont-graph" ref="ontologyGraphRef"></div>
             <div class="muted small">
               <div><strong>选中关系：</strong>{{ selectedOntologyRelId ? selectedOntologyRelId : '（未选择）' }}</div>
               <pre class="graph-example">{{ selectedOntologyRelPreview }}</pre>
@@ -3432,9 +3437,10 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
 
 <script setup lang="ts">
 import axios from "axios";
-import { ref, computed, onMounted, watch, reactive } from "vue";
+import { ref, computed, onMounted, watch, reactive, nextTick, onBeforeUnmount } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import cytoscape from "cytoscape";
 
 // 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -3936,6 +3942,131 @@ const ontologyEntityFilters = reactive({ keyword: "", category: "", status: "" }
 const ontologyRelFilters = reactive({ keyword: "", status: "" });
 const selectedOntologyRelId = ref<string>("");
 
+// 关系图谱预览（Cytoscape）
+const ontologyGraphRef = ref<HTMLDivElement | null>(null);
+let ontologyCy: cytoscape.Core | null = null;
+
+function buildOntologyGraphElements() {
+  const nodes = ontologyEntities.value.map((e) => ({
+    data: {
+      id: `ent:${e.id}`,
+      raw_id: e.id,
+      label: e.label,
+      category: e.category,
+      status: e.status,
+    },
+  }));
+  const edges = ontologyRelations.value.map((r) => ({
+    data: {
+      id: `rel:${r.id}`,
+      raw_id: r.id,
+      source: `ent:${r.from}`,
+      target: `ent:${r.to}`,
+      label: r.label,
+      predicate: r.predicate,
+      status: r.status,
+      selected: selectedOntologyRelId.value === r.id ? "1" : "0",
+    },
+  }));
+  return [...nodes, ...edges];
+}
+
+function ensureOntologyGraph() {
+  if (ontologyCy || !ontologyGraphRef.value) return;
+  ontologyCy = cytoscape({
+    container: ontologyGraphRef.value,
+    elements: buildOntologyGraphElements(),
+    layout: { name: "cose", animate: true, fit: true },
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": "rgba(59, 130, 246, 0.7)",
+          "border-color": "rgba(147, 51, 234, 0.45)",
+          "border-width": 1,
+          color: "#e5ecff",
+          "font-size": 11,
+          label: "data(label)",
+          "text-valign": "center",
+          "text-halign": "center",
+          width: 44,
+          height: 44,
+        },
+      },
+      {
+        selector: 'node[status = "已停用"]',
+        style: { "background-color": "rgba(148, 163, 184, 0.5)" },
+      },
+      {
+        selector: "edge",
+        style: {
+          width: 2,
+          "line-color": "rgba(96, 165, 250, 0.55)",
+          "target-arrow-color": "rgba(96, 165, 250, 0.75)",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+          label: "data(label)",
+          "font-size": 10,
+          color: "rgba(226, 232, 240, 0.9)",
+          "text-background-color": "rgba(15, 23, 42, 0.75)",
+          "text-background-opacity": 1,
+          "text-background-padding": 2,
+        },
+      },
+      {
+        selector: 'edge[selected = "1"]',
+        style: {
+          width: 4,
+          "line-color": "rgba(147, 51, 234, 0.75)",
+          "target-arrow-color": "rgba(147, 51, 234, 0.9)",
+        },
+      },
+      {
+        selector: 'edge[status = "已停用"]',
+        style: { "line-color": "rgba(148, 163, 184, 0.45)", "target-arrow-color": "rgba(148, 163, 184, 0.6)" },
+      },
+    ],
+    userZoomingEnabled: true,
+    userPanningEnabled: true,
+    boxSelectionEnabled: true,
+    wheelSensitivity: 0.18,
+  });
+
+  // 点击边：选中关系（同步右侧文本/校验）
+  ontologyCy.on("tap", "edge", (evt) => {
+    const raw = evt.target?.data?.("raw_id");
+    if (raw) selectedOntologyRelId.value = String(raw);
+  });
+
+  // 默认选中第一条关系
+  if (!selectedOntologyRelId.value && ontologyRelations.value.length) {
+    selectedOntologyRelId.value = ontologyRelations.value[0].id;
+  }
+}
+
+function refreshOntologyGraph(shouldRelayout = false) {
+  if (!ontologyCy) return;
+  ontologyCy.batch(() => {
+    ontologyCy!.elements().remove();
+    ontologyCy!.add(buildOntologyGraphElements() as any);
+  });
+  if (shouldRelayout) {
+    ontologyCy.layout({ name: "cose", animate: true, fit: true }).run();
+  } else {
+    // 更新选中高亮即可，保持当前布局与用户拖拽结果
+    ontologyCy.style().update();
+  }
+}
+
+function ontologyGraphFit() {
+  if (!ontologyCy) return;
+  ontologyCy.fit(undefined, 30);
+}
+function ontologyGraphRelayout() {
+  if (!ontologyCy) return;
+  ontologyCy.layout({ name: "cose", animate: true, fit: true }).run();
+}
+
 const ontologyEntityEditing = reactive<{ open: boolean; mode: "new" | "edit"; editingId: string }>({
   open: false,
   mode: "new",
@@ -4053,6 +4184,49 @@ const selectedOntologyRelPreview = computed(() => {
     r.constraint_shacl ? `constraint:\n${r.constraint_shacl}` : "constraint: -",
   ];
   return lines.join("\n");
+});
+
+// 进入/离开页面时初始化与销毁图谱；数据变更时刷新元素
+watch(
+  () => activePage.value,
+  async (p) => {
+    if (p === "ontology") {
+      await nextTick();
+      ensureOntologyGraph();
+      refreshOntologyGraph(true);
+      ontologyGraphFit();
+    } else {
+      if (ontologyCy) {
+        ontologyCy.destroy();
+        ontologyCy = null;
+      }
+    }
+  }
+);
+watch(
+  () => [ontologyEntities.value, ontologyRelations.value],
+  async () => {
+    if (activePage.value !== "ontology") return;
+    await nextTick();
+    ensureOntologyGraph();
+    refreshOntologyGraph(true);
+  },
+  { deep: true }
+);
+watch(
+  () => selectedOntologyRelId.value,
+  () => {
+    if (activePage.value !== "ontology") return;
+    // 只更新选中样式，不强制重新布局
+    refreshOntologyGraph(false);
+  }
+);
+
+onBeforeUnmount(() => {
+  if (ontologyCy) {
+    ontologyCy.destroy();
+    ontologyCy = null;
+  }
 });
 
 const ontologyIssues = computed(() => {
@@ -6004,8 +6178,9 @@ watch(
   }
 }
 .ont-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* L2 本体页：改为上下结构，保证每个模块都能完整展示 */
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-top: 12px;
 }
@@ -6150,16 +6325,34 @@ watch(
   border-radius: 9px;
 }
 .ont-split {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
+  /* 关系管理内部也改为上下结构：上列表下预览 */
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
 }
 .ont-preview {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.03);
+}
+.ont-preview-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+.ont-graph {
+  width: 100%;
+  height: 260px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+}
+.ont-graph:empty {
+  min-height: 260px;
 }
 .inline-grid {
   display: grid;
@@ -6170,9 +6363,7 @@ watch(
   .ont-toolbar {
     grid-template-columns: 1fr;
   }
-  .ont-split {
-    grid-template-columns: 1fr;
-  }
+  /* 旧的左右结构已移除，这里无需再改 */
 }
 .ont-card {
   border: 1px solid rgba(255, 255, 255, 0.1);
