@@ -575,7 +575,11 @@
                 <div class="tl-right">
                   <div class="tl-head">
 <<<<<<< Current (Your changes)
+<<<<<<< Current (Your changes)
                   <div class="tl-type">{{ e.type }}</div>
+=======
+                  <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
+>>>>>>> Incoming (Background Agent changes)
 =======
                   <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
 >>>>>>> Incoming (Background Agent changes)
@@ -3096,68 +3100,318 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
     <div class="ont-grid">
       <div class="ont-card">
         <div class="ont-title">对象 / 实体管理</div>
-        <div class="ont-desc muted">定义本体中的实体类型（如路段、泵站、事件等）及其属性</div>
-        <div class="ont-form">
-          <div class="form-row">
-            <label>实体ID</label>
-            <input v-model="ontologyEntityId" placeholder="如 road-segment" />
-          </div>
-          <div class="form-row">
-            <label>名称</label>
-            <input v-model="ontologyEntityLabel" placeholder="如 路段" />
-          </div>
-          <div class="form-row">
-            <label>类型</label>
-            <select v-model="ontologyEntityType">
-              <option>实体</option>
-              <option>事件</option>
-              <option>设施</option>
-              <option>资源</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>属性</label>
-            <textarea v-model="ontologyEntityAttrs" rows="2" placeholder="逗号分隔，如：名称, 位置, 责任单位"></textarea>
-          </div>
-          <button @click="addOntologyEntity">保存到预览（本地）</button>
+        <div class="ont-desc muted">
+          更贴近真实：支持实体继承、版本/状态、属性定义（类型/必填/来源/说明）、编辑/删除与筛选（本地演示态）。
         </div>
-        <div class="ont-list">
-          <div v-for="(e, idx) in ontologyEntities" :key="idx" class="ont-item">
-            <div><strong>{{ e.label }}</strong> <span class="muted">({{ e.id }})</span></div>
-            <div class="muted">类型：{{ e.type }}｜属性：{{ e.attrs }}</div>
+
+        <div class="ont-toolbar">
+          <input v-model="ontologyEntityFilters.keyword" placeholder="搜索：ID/名称/标签/属性名…" />
+          <select v-model="ontologyEntityFilters.category">
+            <option value="">全部分类</option>
+            <option>实体</option>
+            <option>事件</option>
+            <option>设施</option>
+            <option>组织</option>
+            <option>资源</option>
+          </select>
+          <select v-model="ontologyEntityFilters.status">
+            <option value="">全部状态</option>
+            <option>草稿</option>
+            <option>已发布</option>
+            <option>已停用</option>
+          </select>
+          <button class="btn" @click="startNewOntologyEntity">新建实体</button>
+        </div>
+
+        <div v-if="ontologyEntityEditing.open" class="ont-editor">
+          <div class="ont-editor-head">
+            <strong>{{ ontologyEntityEditing.mode === 'edit' ? '编辑实体' : '新建实体' }}</strong>
+            <span class="muted small">（本地演示态，不影响现有页面）</span>
           </div>
-          <div v-if="ontologyEntities.length === 0" class="muted">尚未添加实体（演示本地态）。</div>
+          <div class="ont-form">
+            <div class="form-row">
+              <label>实体ID（唯一）</label>
+              <input v-model="ontologyEntityForm.id" placeholder="如 road-segment" />
+            </div>
+            <div class="form-row">
+              <label>名称</label>
+              <input v-model="ontologyEntityForm.label" placeholder="如 路段" />
+            </div>
+            <div class="form-row">
+              <label>分类</label>
+              <select v-model="ontologyEntityForm.category">
+                <option>实体</option>
+                <option>事件</option>
+                <option>设施</option>
+                <option>组织</option>
+                <option>资源</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>父类 / 继承</label>
+              <select v-model="ontologyEntityForm.parent">
+                <option value="">无</option>
+                <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>状态</label>
+              <select v-model="ontologyEntityForm.status">
+                <option>草稿</option>
+                <option>已发布</option>
+                <option>已停用</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>版本</label>
+              <input v-model="ontologyEntityForm.version" placeholder="如 v1.0.0" />
+            </div>
+            <div class="form-row">
+              <label>维护单位</label>
+              <input v-model="ontologyEntityForm.owner_org" placeholder="如 市排水中心" />
+            </div>
+            <div class="form-row">
+              <label>标签（逗号分隔）</label>
+              <input v-model="ontologyEntityForm.tags" placeholder="如 空间对象, 设施, 资产" />
+            </div>
+            <div class="form-row">
+              <label>说明</label>
+              <textarea v-model="ontologyEntityForm.desc" rows="2" placeholder="用于说明实体的语义边界、使用场景与注意事项"></textarea>
+            </div>
+            <div class="form-row">
+              <label>属性定义（每行一条：属性名 | 类型 | 必填(0/1) | 来源 | 说明）</label>
+              <textarea
+                v-model="ontologyEntityForm.props_text"
+                rows="5"
+                placeholder="name | string | 1 | 主数据 | 路段名称&#10;length_m | number | 0 | GIS | 路段长度（米）"
+              ></textarea>
+            </div>
+            <div class="ont-actions">
+              <button class="btn primary" @click="saveOntologyEntity">{{ ontologyEntityEditing.mode === 'edit' ? '更新' : '创建' }}</button>
+              <button class="btn ghost" @click="cancelOntologyEntityEdit">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ont-table-wrap">
+          <table class="ont-table">
+            <thead>
+              <tr>
+                <th>实体</th>
+                <th>分类/继承</th>
+                <th>状态/版本</th>
+                <th>属性</th>
+                <th>更新时间</th>
+                <th style="width: 160px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="e in filteredOntologyEntities" :key="e.id">
+                <td>
+                  <div class="cell-title"><strong>{{ e.label }}</strong></div>
+                  <div class="muted small">{{ e.id }}<span v-if="e.owner_org"> ｜ {{ e.owner_org }}</span></div>
+                  <div v-if="e.tags && e.tags.length" class="chip-row">
+                    <span v-for="t in e.tags.slice(0, 3)" :key="t" class="chip">{{ t }}</span>
+                    <span v-if="e.tags.length > 3" class="chip muted">+{{ e.tags.length - 3 }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="chip-row">
+                    <span class="chip blue">{{ e.category }}</span>
+                    <span v-if="e.parent" class="chip">继承：{{ ontologyEntityLabelById(e.parent) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="chip-row">
+                    <span class="chip" :class="e.status === '已发布' ? 'green' : e.status === '已停用' ? 'gray' : 'yellow'">{{ e.status }}</span>
+                    <span class="chip muted">{{ e.version }}</span>
+                  </div>
+                </td>
+                <td class="muted small">
+                  <div>{{ e.props.length }} 项</div>
+                  <div v-if="e.props.length" class="muted small">{{ e.props.slice(0, 2).map((p) => p.name).join('、') }}<span v-if="e.props.length > 2">…</span></div>
+                </td>
+                <td class="muted small">{{ e.updated_at }}</td>
+                <td>
+                  <div class="btn-row">
+                    <button class="btn tiny" @click="editOntologyEntity(e.id)">编辑</button>
+                    <button class="btn tiny ghost" @click="duplicateOntologyEntity(e.id)">复制</button>
+                    <button class="btn tiny danger" @click="deleteOntologyEntity(e.id)">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="filteredOntologyEntities.length === 0">
+                <td colspan="6" class="muted small">无匹配实体。你可以点“新建实体”或者调整筛选条件。</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div class="ont-card">
         <div class="ont-title">关系管理</div>
-        <div class="ont-desc muted">定义实体之间的关系（如路段→泵站、事件→责任单位等）</div>
-        <div class="ont-form">
-          <div class="form-row">
-            <label>起点实体</label>
-            <input v-model="ontologyRelFrom" placeholder="如 road-segment" />
-          </div>
-          <div class="form-row">
-            <label>终点实体</label>
-            <input v-model="ontologyRelTo" placeholder="如 pump-station" />
-          </div>
-          <div class="form-row">
-            <label>关系类型</label>
-            <input v-model="ontologyRelType" placeholder="如 供排水关联" />
-          </div>
-          <div class="form-row">
-            <label>描述</label>
-            <textarea v-model="ontologyRelDesc" rows="2" placeholder="关系说明"></textarea>
-          </div>
-          <button @click="addOntologyRelation">保存到预览（本地）</button>
+        <div class="ont-desc muted">
+          更贴近真实：关系支持谓词/反向关系、方向、基数（min/max）、约束片段（SHACL 示意）、关系属性（如距离/权重/证据要求）与预览。
         </div>
-        <div class="ont-list">
-          <div v-for="(r, idx) in ontologyRelations" :key="idx" class="ont-item">
-            <div><strong>{{ r.from }}</strong> → <strong>{{ r.to }}</strong> <span class="muted">({{ r.type }})</span></div>
-            <div class="muted">{{ r.desc }}</div>
+
+        <div class="ont-toolbar">
+          <input v-model="ontologyRelFilters.keyword" placeholder="搜索：关系ID/名称/谓词/起点/终点…" />
+          <select v-model="ontologyRelFilters.status">
+            <option value="">全部状态</option>
+            <option>草稿</option>
+            <option>已发布</option>
+            <option>已停用</option>
+          </select>
+          <button class="btn" @click="startNewOntologyRelation">新建关系</button>
+        </div>
+
+        <div v-if="ontologyRelEditing.open" class="ont-editor">
+          <div class="ont-editor-head">
+            <strong>{{ ontologyRelEditing.mode === 'edit' ? '编辑关系' : '新建关系' }}</strong>
+            <span class="muted small">（建议从实体列表里选 Domain/Range）</span>
           </div>
-          <div v-if="ontologyRelations.length === 0" class="muted">尚未添加关系（演示本地态）。</div>
+          <div class="ont-form">
+            <div class="form-row">
+              <label>关系ID（唯一）</label>
+              <input v-model="ontologyRelForm.id" placeholder="如 located_in" />
+            </div>
+            <div class="form-row">
+              <label>关系名称</label>
+              <input v-model="ontologyRelForm.label" placeholder="如 位于/隶属" />
+            </div>
+            <div class="form-row">
+              <label>谓词（Predicate）</label>
+              <input v-model="ontologyRelForm.predicate" placeholder="如 ex:locatedIn / hasOwner / nearBy" />
+            </div>
+            <div class="form-row">
+              <label>起点（Domain）</label>
+              <select v-model="ontologyRelForm.from">
+                <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>终点（Range）</label>
+              <select v-model="ontologyRelForm.to">
+                <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>方向</label>
+              <select v-model="ontologyRelForm.direction">
+                <option>单向</option>
+                <option>双向</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>反向关系（可选）</label>
+              <input v-model="ontologyRelForm.inverse_of" placeholder="如 contains（对应 located_in 的反向）" />
+            </div>
+            <div class="form-row">
+              <label>基数（Domain→Range）</label>
+              <div class="inline-grid">
+                <input v-model="ontologyRelForm.card_from_min" placeholder="min" />
+                <input v-model="ontologyRelForm.card_from_max" placeholder="max（n 表示不限制）" />
+              </div>
+            </div>
+            <div class="form-row">
+              <label>状态 / 版本</label>
+              <div class="inline-grid">
+                <select v-model="ontologyRelForm.status">
+                  <option>草稿</option>
+                  <option>已发布</option>
+                  <option>已停用</option>
+                </select>
+                <input v-model="ontologyRelForm.version" placeholder="如 v1.0.0" />
+              </div>
+            </div>
+            <div class="form-row">
+              <label>说明</label>
+              <textarea v-model="ontologyRelForm.desc" rows="2" placeholder="关系语义边界、适用条件、可选证据等"></textarea>
+            </div>
+            <div class="form-row">
+              <label>关系属性（每行一条：属性名 | 类型 | 必填(0/1) | 来源 | 说明）</label>
+              <textarea v-model="ontologyRelForm.props_text" rows="4" placeholder="distance_m | number | 0 | GIS | 设施间距离（米）"></textarea>
+            </div>
+            <div class="form-row">
+              <label>约束片段（SHACL/规则示意，可选）</label>
+              <textarea
+                v-model="ontologyRelForm.constraint_shacl"
+                rows="4"
+                placeholder="ex:RoadSegmentShape a sh:NodeShape ;&#10;  sh:property [ sh:path ex:locatedIn ; sh:class ex:AdminArea ; sh:minCount 1 ] ."
+              ></textarea>
+            </div>
+            <div class="ont-actions">
+              <button class="btn primary" @click="saveOntologyRelation">{{ ontologyRelEditing.mode === 'edit' ? '更新' : '创建' }}</button>
+              <button class="btn ghost" @click="cancelOntologyRelationEdit">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ont-split">
+          <div class="ont-table-wrap">
+            <table class="ont-table">
+              <thead>
+                <tr>
+                  <th>关系</th>
+                  <th>Domain → Range</th>
+                  <th>约束</th>
+                  <th>更新时间</th>
+                  <th style="width: 160px;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in filteredOntologyRelations" :key="r.id" @click="selectOntologyRelation(r.id)" :class="selectedOntologyRelId === r.id ? 'row-active' : ''">
+                  <td>
+                    <div class="cell-title"><strong>{{ r.label }}</strong></div>
+                    <div class="muted small">{{ r.id }} ｜ {{ r.predicate }}</div>
+                    <div class="chip-row">
+                      <span class="chip" :class="r.status === '已发布' ? 'green' : r.status === '已停用' ? 'gray' : 'yellow'">{{ r.status }}</span>
+                      <span class="chip muted">{{ r.version }}</span>
+                      <span class="chip blue">{{ r.direction }}</span>
+                      <span v-if="r.inverse_of" class="chip">inverse: {{ r.inverse_of }}</span>
+                    </div>
+                  </td>
+                  <td class="muted small">
+                    <div><strong>{{ ontologyEntityLabelById(r.from) }}</strong> → <strong>{{ ontologyEntityLabelById(r.to) }}</strong></div>
+                    <div>{{ r.from }} → {{ r.to }}</div>
+                  </td>
+                  <td class="muted small">
+                    <div>基数：{{ r.card_from_min }}..{{ r.card_from_max }}</div>
+                    <div>属性：{{ r.props.length }} 项</div>
+                  </td>
+                  <td class="muted small">{{ r.updated_at }}</td>
+                  <td>
+                    <div class="btn-row">
+                      <button class="btn tiny" @click.stop="editOntologyRelation(r.id)">编辑</button>
+                      <button class="btn tiny ghost" @click.stop="duplicateOntologyRelation(r.id)">复制</button>
+                      <button class="btn tiny danger" @click.stop="deleteOntologyRelation(r.id)">删除</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="filteredOntologyRelations.length === 0">
+                  <td colspan="5" class="muted small">无匹配关系。你可以点“新建关系”或者调整筛选条件。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="ont-preview">
+            <div class="ont-title">关系预览 / 校验</div>
+            <div class="muted small">
+              <div><strong>选中关系：</strong>{{ selectedOntologyRelId ? selectedOntologyRelId : '（未选择）' }}</div>
+              <pre class="graph-example">{{ selectedOntologyRelPreview }}</pre>
+              <div class="muted small" v-if="ontologyIssues.length">
+                <strong>校验发现：</strong>
+                <ul>
+                  <li v-for="(it, i) in ontologyIssues.slice(0, 8)" :key="i">{{ it }}</li>
+                </ul>
+                <div v-if="ontologyIssues.length > 8" class="muted">… 还有 {{ ontologyIssues.length - 8 }} 条</div>
+              </div>
+              <div class="muted small" v-else>
+                <strong>校验发现：</strong>未发现明显问题（本地规则：重复 ID、未知实体引用、基数格式等）。
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3167,18 +3421,18 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
           - 图谱：Gremlin / Cypher / GSQL 查询<br />
           - RDF：SPARQL 端点；SHACL/OWL 约束校验<br />
           - 关系型：视图/存储过程/物化视图；Redis 缓存热点对象<br />
-          - 可接入：版本/血缘/审计接口
+          - 可接入：版本/血缘/审计接口（entity_version / relation_version / lineage_refs）
         </div>
       </div>
     </div>
-      </section>
-    </main>
+  </section>
+</main>
   </div>
 </template>
 
 <script setup lang="ts">
 import axios from "axios";
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, reactive } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -3482,17 +3736,562 @@ function resetFlow() {
 }
 
 // 本体管理演示（前端本地状态，不影响现有页面）
-const ontologyEntityId = ref("road-segment");
-const ontologyEntityLabel = ref("路段");
-const ontologyEntityType = ref("实体");
-const ontologyEntityAttrs = ref("名称, 位置, 责任单位, 设施类型");
-const ontologyEntities = ref<{ id: string; label: string; type: string; attrs: string }[]>([]);
+type OntologyProp = { name: string; datatype: string; required: boolean; source: string; desc: string };
+type OntologyEntity = {
+  id: string;
+  label: string;
+  category: string;
+  parent: string;
+  status: "草稿" | "已发布" | "已停用";
+  version: string;
+  owner_org: string;
+  tags: string[];
+  desc: string;
+  props: OntologyProp[];
+  created_at: string;
+  updated_at: string;
+};
+type OntologyRelation = {
+  id: string;
+  label: string;
+  predicate: string;
+  from: string;
+  to: string;
+  direction: "单向" | "双向";
+  inverse_of: string;
+  status: "草稿" | "已发布" | "已停用";
+  version: string;
+  card_from_min: string;
+  card_from_max: string;
+  desc: string;
+  props: OntologyProp[];
+  constraint_shacl: string;
+  created_at: string;
+  updated_at: string;
+};
 
-const ontologyRelFrom = ref("road-segment");
-const ontologyRelTo = ref("pump-station");
-const ontologyRelType = ref("供排水关联");
-const ontologyRelDesc = ref("路段关联附近泵站用于排涝");
-const ontologyRelations = ref<{ from: string; to: string; type: string; desc: string }[]>([]);
+function tsShort(d = new Date()) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function parseTags(s: string) {
+  return (s || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+function parsePropsText(text: string): OntologyProp[] {
+  const raw = (text || "").trim();
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((x) => x.trim());
+      const [name, datatype, required, source, desc] = parts;
+      return {
+        name: name || "prop",
+        datatype: datatype || "string",
+        required: required === "1" || required?.toLowerCase?.() === "true",
+        source: source || "",
+        desc: desc || "",
+      };
+    });
+}
+function propsToText(props: OntologyProp[]) {
+  return (props || [])
+    .map((p) => `${p.name} | ${p.datatype} | ${p.required ? "1" : "0"} | ${p.source || ""} | ${p.desc || ""}`.trim())
+    .join("\n");
+}
+function ontologyEntityLabelById(id: string) {
+  const found = ontologyEntities.value.find((e) => e.id === id);
+  return found ? found.label : id || "-";
+}
+
+const ontologyEntities = ref<OntologyEntity[]>([
+  {
+    id: "road-segment",
+    label: "路段",
+    category: "实体",
+    parent: "",
+    status: "已发布",
+    version: "v1.0.0",
+    owner_org: "市排水中心",
+    tags: ["空间对象", "资产"],
+    desc: "道路网格化管理对象，可关联雨量/水位/责任单位/处置任务。",
+    props: parsePropsText(
+      "name | string | 1 | 主数据 | 路段名称\nadmin_area | string | 1 | GIS | 行政区\nlength_m | number | 0 | GIS | 路段长度（米）\nelevation_m | number | 0 | DEM | 平均高程（米）"
+    ),
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 12)),
+  },
+  {
+    id: "pump-station",
+    label: "泵站",
+    category: "设施",
+    parent: "",
+    status: "已发布",
+    version: "v1.0.0",
+    owner_org: "排水运维公司",
+    tags: ["设施", "运行状态"],
+    desc: "排涝泵站，包含设备清单、工况与报警事件。",
+    props: parsePropsText(
+      "name | string | 1 | 主数据 | 泵站名称\nlocation | geo | 1 | GIS | 坐标/位置\ncapacity_m3s | number | 0 | 台账 | 设计流量（m³/s）\nstatus | enum | 1 | SCADA | 运行状态（开/停/故障）"
+    ),
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 28)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 3)),
+  },
+  {
+    id: "admin-area",
+    label: "行政区/责任片区",
+    category: "组织",
+    parent: "",
+    status: "已发布",
+    version: "v1.0.0",
+    owner_org: "城运中心",
+    tags: ["管理域"],
+    desc: "用于空间归属、责任划分与统计口径。",
+    props: parsePropsText("name | string | 1 | 主数据 | 区域名称\ncode | string | 1 | 主数据 | 区域编码"),
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 40)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 1)),
+  },
+  {
+    id: "incident",
+    label: "事件",
+    category: "事件",
+    parent: "",
+    status: "已发布",
+    version: "v1.0.0",
+    owner_org: "城运中心",
+    tags: ["处置", "时间线"],
+    desc: "内涝/积水等处置事件，承载时间线、证据与任务包。",
+    props: parsePropsText(
+      "title | string | 1 | 工作流 | 事件标题\nlevel | enum | 1 | 工作流 | 事件级别\ncreated_at | datetime | 1 | 工作流 | 创建时间\nstatus | enum | 1 | 工作流 | 状态机"
+    ),
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 10)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 4)),
+  },
+]);
+
+const ontologyRelations = ref<OntologyRelation[]>([
+  {
+    id: "located_in",
+    label: "位于/隶属",
+    predicate: "ex:locatedIn",
+    from: "road-segment",
+    to: "admin-area",
+    direction: "单向",
+    inverse_of: "contains",
+    status: "已发布",
+    version: "v1.0.0",
+    card_from_min: "1",
+    card_from_max: "1",
+    desc: "路段必须归属一个责任片区，用于统计与派单归属。",
+    props: parsePropsText("confidence | number | 0 | 计算 | 归属置信度（0-1）"),
+    constraint_shacl:
+      "ex:RoadSegmentShape a sh:NodeShape ;\n  sh:targetClass ex:RoadSegment ;\n  sh:property [ sh:path ex:locatedIn ; sh:class ex:AdminArea ; sh:minCount 1 ; sh:maxCount 1 ] .",
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 29)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 6)),
+  },
+  {
+    id: "near_pump_station",
+    label: "邻近泵站",
+    predicate: "ex:nearPumpStation",
+    from: "road-segment",
+    to: "pump-station",
+    direction: "单向",
+    inverse_of: "",
+    status: "草稿",
+    version: "v0.9.0",
+    card_from_min: "0",
+    card_from_max: "n",
+    desc: "用于排涝联动：路段可关联 0..n 个泵站，支持按距离/可达性排序。",
+    props: parsePropsText("distance_m | number | 0 | GIS | 设施间距离（米）\nroute_eta_min | number | 0 | 计算 | 预计到达时间（分钟）"),
+    constraint_shacl: "",
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 8)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 2)),
+  },
+  {
+    id: "incident_targets",
+    label: "事件涉及对象",
+    predicate: "ex:targets",
+    from: "incident",
+    to: "road-segment",
+    direction: "单向",
+    inverse_of: "",
+    status: "已发布",
+    version: "v1.0.0",
+    card_from_min: "1",
+    card_from_max: "n",
+    desc: "事件可涉及多个目标对象（路段/点位等），为研判与任务包生成提供上下文。",
+    props: parsePropsText("role | string | 0 | 工作流 | 目标角色（主目标/关联目标）"),
+    constraint_shacl: "",
+    created_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 9)),
+    updated_at: tsShort(new Date(Date.now() - 1000 * 60 * 60 * 1)),
+  },
+]);
+
+const ontologyEntityFilters = reactive({ keyword: "", category: "", status: "" });
+const ontologyRelFilters = reactive({ keyword: "", status: "" });
+const selectedOntologyRelId = ref<string>("");
+
+const ontologyEntityEditing = reactive<{ open: boolean; mode: "new" | "edit"; editingId: string }>({
+  open: false,
+  mode: "new",
+  editingId: "",
+});
+const ontologyRelEditing = reactive<{ open: boolean; mode: "new" | "edit"; editingId: string }>({
+  open: false,
+  mode: "new",
+  editingId: "",
+});
+
+const ontologyEntityForm = reactive<{
+  id: string;
+  label: string;
+  category: string;
+  parent: string;
+  status: "草稿" | "已发布" | "已停用";
+  version: string;
+  owner_org: string;
+  tags: string;
+  desc: string;
+  props_text: string;
+}>({
+  id: "road-segment",
+  label: "路段",
+  category: "实体",
+  parent: "",
+  status: "草稿",
+  version: "v1.0.0",
+  owner_org: "市排水中心",
+  tags: "空间对象, 资产",
+  desc: "",
+  props_text: "name | string | 1 | 主数据 | 路段名称",
+});
+
+const ontologyRelForm = reactive<{
+  id: string;
+  label: string;
+  predicate: string;
+  from: string;
+  to: string;
+  direction: "单向" | "双向";
+  inverse_of: string;
+  status: "草稿" | "已发布" | "已停用";
+  version: string;
+  card_from_min: string;
+  card_from_max: string;
+  desc: string;
+  props_text: string;
+  constraint_shacl: string;
+}>({
+  id: "near_pump_station",
+  label: "邻近泵站",
+  predicate: "ex:nearPumpStation",
+  from: "road-segment",
+  to: "pump-station",
+  direction: "单向",
+  inverse_of: "",
+  status: "草稿",
+  version: "v0.9.0",
+  card_from_min: "0",
+  card_from_max: "n",
+  desc: "",
+  props_text: "distance_m | number | 0 | GIS | 设施间距离（米）",
+  constraint_shacl: "",
+});
+
+const filteredOntologyEntities = computed(() => {
+  const kw = (ontologyEntityFilters.keyword || "").trim().toLowerCase();
+  return ontologyEntities.value.filter((e) => {
+    if (ontologyEntityFilters.category && e.category !== ontologyEntityFilters.category) return false;
+    if (ontologyEntityFilters.status && e.status !== ontologyEntityFilters.status) return false;
+    if (!kw) return true;
+    const hay = [
+      e.id,
+      e.label,
+      e.category,
+      e.owner_org,
+      e.tags.join(","),
+      e.desc,
+      e.props.map((p) => p.name).join(","),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(kw);
+  });
+});
+const filteredOntologyRelations = computed(() => {
+  const kw = (ontologyRelFilters.keyword || "").trim().toLowerCase();
+  return ontologyRelations.value.filter((r) => {
+    if (ontologyRelFilters.status && r.status !== ontologyRelFilters.status) return false;
+    if (!kw) return true;
+    const hay = [r.id, r.label, r.predicate, r.from, r.to, r.inverse_of, r.desc].join(" ").toLowerCase();
+    return hay.includes(kw);
+  });
+});
+
+const selectedOntologyRelPreview = computed(() => {
+  const id = selectedOntologyRelId.value;
+  const r = ontologyRelations.value.find((x) => x.id === id) || ontologyRelations.value[0];
+  if (!r) return "（暂无关系定义）";
+  const fromLabel = ontologyEntityLabelById(r.from);
+  const toLabel = ontologyEntityLabelById(r.to);
+  const card = `${r.card_from_min}..${r.card_from_max}`;
+  const lines = [
+    `${fromLabel}(${r.from}) --[${r.label} | ${r.predicate} | ${card}]--> ${toLabel}(${r.to})`,
+    "",
+    `direction: ${r.direction}`,
+    r.inverse_of ? `inverse_of: ${r.inverse_of}` : "inverse_of: -",
+    `status/version: ${r.status} / ${r.version}`,
+    r.desc ? `desc: ${r.desc}` : "desc: -",
+    "",
+    `props(${r.props.length}): ${r.props.length ? r.props.map((p) => p.name).join(", ") : "-"}`,
+    "",
+    r.constraint_shacl ? `constraint:\n${r.constraint_shacl}` : "constraint: -",
+  ];
+  return lines.join("\n");
+});
+
+const ontologyIssues = computed(() => {
+  const issues: string[] = [];
+  const entityIds = ontologyEntities.value.map((e) => e.id);
+  const relIds = ontologyRelations.value.map((r) => r.id);
+
+  // 重复 ID
+  const dup = (arr: string[]) => arr.filter((x, i) => arr.indexOf(x) !== i);
+  dup(entityIds).forEach((id) => issues.push(`实体ID重复：${id}`));
+  dup(relIds).forEach((id) => issues.push(`关系ID重复：${id}`));
+
+  // 关系引用实体存在性
+  ontologyRelations.value.forEach((r) => {
+    if (!entityIds.includes(r.from)) issues.push(`关系 ${r.id} 的 Domain 不存在：${r.from}`);
+    if (!entityIds.includes(r.to)) issues.push(`关系 ${r.id} 的 Range 不存在：${r.to}`);
+    if (r.card_from_min && !/^\d+$/.test(r.card_from_min)) issues.push(`关系 ${r.id} 的 min 基数格式异常：${r.card_from_min}`);
+    if (r.card_from_max && !(r.card_from_max === "n" || /^\d+$/.test(r.card_from_max)))
+      issues.push(`关系 ${r.id} 的 max 基数格式异常：${r.card_from_max}`);
+  });
+
+  return issues;
+});
+
+function resetOntologyEntityFormFrom(e?: OntologyEntity) {
+  ontologyEntityForm.id = e?.id || "";
+  ontologyEntityForm.label = e?.label || "";
+  ontologyEntityForm.category = e?.category || "实体";
+  ontologyEntityForm.parent = e?.parent || "";
+  ontologyEntityForm.status = e?.status || "草稿";
+  ontologyEntityForm.version = e?.version || "v1.0.0";
+  ontologyEntityForm.owner_org = e?.owner_org || "";
+  ontologyEntityForm.tags = (e?.tags || []).join(", ");
+  ontologyEntityForm.desc = e?.desc || "";
+  ontologyEntityForm.props_text = propsToText(e?.props || []);
+}
+function startNewOntologyEntity() {
+  ontologyEntityEditing.open = true;
+  ontologyEntityEditing.mode = "new";
+  ontologyEntityEditing.editingId = "";
+  resetOntologyEntityFormFrom({
+    id: "",
+    label: "",
+    category: "实体",
+    parent: "",
+    status: "草稿",
+    version: "v1.0.0",
+    owner_org: "",
+    tags: [],
+    desc: "",
+    props: [],
+    created_at: tsShort(),
+    updated_at: tsShort(),
+  });
+}
+function editOntologyEntity(id: string) {
+  const found = ontologyEntities.value.find((x) => x.id === id);
+  if (!found) return;
+  ontologyEntityEditing.open = true;
+  ontologyEntityEditing.mode = "edit";
+  ontologyEntityEditing.editingId = id;
+  resetOntologyEntityFormFrom(found);
+}
+function cancelOntologyEntityEdit() {
+  ontologyEntityEditing.open = false;
+  ontologyEntityEditing.editingId = "";
+}
+function saveOntologyEntity() {
+  const id = (ontologyEntityForm.id || "").trim();
+  const label = (ontologyEntityForm.label || "").trim();
+  if (!id || !label) return;
+  const now = tsShort();
+  const entity: OntologyEntity = {
+    id,
+    label,
+    category: ontologyEntityForm.category || "实体",
+    parent: ontologyEntityForm.parent || "",
+    status: ontologyEntityForm.status || "草稿",
+    version: (ontologyEntityForm.version || "v1.0.0").trim(),
+    owner_org: (ontologyEntityForm.owner_org || "").trim(),
+    tags: parseTags(ontologyEntityForm.tags),
+    desc: (ontologyEntityForm.desc || "").trim(),
+    props: parsePropsText(ontologyEntityForm.props_text),
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (ontologyEntityEditing.mode === "edit" && ontologyEntityEditing.editingId) {
+    const idx = ontologyEntities.value.findIndex((x) => x.id === ontologyEntityEditing.editingId);
+    if (idx >= 0) {
+      // 保留原创建时间；若改了 ID，则同步更新关系引用
+      const prev = ontologyEntities.value[idx];
+      entity.created_at = prev.created_at;
+      ontologyEntities.value[idx] = entity;
+      if (prev.id !== entity.id) {
+        ontologyRelations.value = ontologyRelations.value.map((r) => ({
+          ...r,
+          from: r.from === prev.id ? entity.id : r.from,
+          to: r.to === prev.id ? entity.id : r.to,
+          updated_at: tsShort(),
+        }));
+      }
+    }
+  } else {
+    if (ontologyEntities.value.some((x) => x.id === entity.id)) return;
+    ontologyEntities.value.unshift(entity);
+  }
+  ontologyEntityEditing.open = false;
+}
+function deleteOntologyEntity(id: string) {
+  ontologyEntities.value = ontologyEntities.value.filter((x) => x.id !== id);
+  // 关系引用变成“未知”更真实：这里不自动删除，只提示校验
+}
+function duplicateOntologyEntity(id: string) {
+  const found = ontologyEntities.value.find((x) => x.id === id);
+  if (!found) return;
+  const now = tsShort();
+  const copy: OntologyEntity = {
+    ...found,
+    id: `${found.id}_copy`,
+    label: `${found.label}（复制）`,
+    status: "草稿",
+    version: found.version,
+    created_at: now,
+    updated_at: now,
+  };
+  ontologyEntities.value.unshift(copy);
+}
+
+function resetOntologyRelFormFrom(r?: OntologyRelation) {
+  ontologyRelForm.id = r?.id || "";
+  ontologyRelForm.label = r?.label || "";
+  ontologyRelForm.predicate = r?.predicate || "";
+  ontologyRelForm.from = r?.from || (ontologyEntities.value[0]?.id || "");
+  ontologyRelForm.to = r?.to || (ontologyEntities.value[1]?.id || ontologyEntities.value[0]?.id || "");
+  ontologyRelForm.direction = r?.direction || "单向";
+  ontologyRelForm.inverse_of = r?.inverse_of || "";
+  ontologyRelForm.status = r?.status || "草稿";
+  ontologyRelForm.version = r?.version || "v1.0.0";
+  ontologyRelForm.card_from_min = r?.card_from_min || "0";
+  ontologyRelForm.card_from_max = r?.card_from_max || "n";
+  ontologyRelForm.desc = r?.desc || "";
+  ontologyRelForm.props_text = propsToText(r?.props || []);
+  ontologyRelForm.constraint_shacl = r?.constraint_shacl || "";
+}
+function startNewOntologyRelation() {
+  ontologyRelEditing.open = true;
+  ontologyRelEditing.mode = "new";
+  ontologyRelEditing.editingId = "";
+  resetOntologyRelFormFrom({
+    id: "",
+    label: "",
+    predicate: "ex:",
+    from: ontologyEntities.value[0]?.id || "",
+    to: ontologyEntities.value[1]?.id || ontologyEntities.value[0]?.id || "",
+    direction: "单向",
+    inverse_of: "",
+    status: "草稿",
+    version: "v1.0.0",
+    card_from_min: "0",
+    card_from_max: "n",
+    desc: "",
+    props: [],
+    constraint_shacl: "",
+    created_at: tsShort(),
+    updated_at: tsShort(),
+  });
+}
+function editOntologyRelation(id: string) {
+  const found = ontologyRelations.value.find((x) => x.id === id);
+  if (!found) return;
+  ontologyRelEditing.open = true;
+  ontologyRelEditing.mode = "edit";
+  ontologyRelEditing.editingId = id;
+  resetOntologyRelFormFrom(found);
+}
+function cancelOntologyRelationEdit() {
+  ontologyRelEditing.open = false;
+  ontologyRelEditing.editingId = "";
+}
+function saveOntologyRelation() {
+  const id = (ontologyRelForm.id || "").trim();
+  const label = (ontologyRelForm.label || "").trim();
+  if (!id || !label) return;
+  const now = tsShort();
+  const rel: OntologyRelation = {
+    id,
+    label,
+    predicate: (ontologyRelForm.predicate || "").trim(),
+    from: ontologyRelForm.from,
+    to: ontologyRelForm.to,
+    direction: ontologyRelForm.direction || "单向",
+    inverse_of: (ontologyRelForm.inverse_of || "").trim(),
+    status: ontologyRelForm.status || "草稿",
+    version: (ontologyRelForm.version || "v1.0.0").trim(),
+    card_from_min: (ontologyRelForm.card_from_min || "0").trim(),
+    card_from_max: (ontologyRelForm.card_from_max || "n").trim(),
+    desc: (ontologyRelForm.desc || "").trim(),
+    props: parsePropsText(ontologyRelForm.props_text),
+    constraint_shacl: (ontologyRelForm.constraint_shacl || "").trim(),
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (ontologyRelEditing.mode === "edit" && ontologyRelEditing.editingId) {
+    const idx = ontologyRelations.value.findIndex((x) => x.id === ontologyRelEditing.editingId);
+    if (idx >= 0) {
+      const prev = ontologyRelations.value[idx];
+      rel.created_at = prev.created_at;
+      ontologyRelations.value[idx] = rel;
+    }
+  } else {
+    if (ontologyRelations.value.some((x) => x.id === rel.id)) return;
+    ontologyRelations.value.unshift(rel);
+  }
+  selectedOntologyRelId.value = rel.id;
+  ontologyRelEditing.open = false;
+}
+function deleteOntologyRelation(id: string) {
+  ontologyRelations.value = ontologyRelations.value.filter((x) => x.id !== id);
+  if (selectedOntologyRelId.value === id) selectedOntologyRelId.value = "";
+}
+function duplicateOntologyRelation(id: string) {
+  const found = ontologyRelations.value.find((x) => x.id === id);
+  if (!found) return;
+  const now = tsShort();
+  const copy: OntologyRelation = {
+    ...found,
+    id: `${found.id}_copy`,
+    label: `${found.label}（复制）`,
+    status: "草稿",
+    created_at: now,
+    updated_at: now,
+  };
+  ontologyRelations.value.unshift(copy);
+}
+function selectOntologyRelation(id: string) {
+  selectedOntologyRelId.value = id;
+}
 
 // 数据接入与治理演示（前端本地状态）
 const dataSourceName = ref("雨量站-001");
@@ -3771,23 +4570,9 @@ function fillOneClick() {
   chatInput.value = ensureOneClickPrompt(chatInput.value);
 }
 
-function addOntologyEntity() {
-  ontologyEntities.value.unshift({
-    id: ontologyEntityId.value.trim() || "entity-id",
-    label: ontologyEntityLabel.value.trim() || "未命名",
-    type: ontologyEntityType.value,
-    attrs: ontologyEntityAttrs.value.trim(),
-  });
-}
-
-function addOntologyRelation() {
-  ontologyRelations.value.unshift({
-    from: ontologyRelFrom.value.trim() || "A",
-    to: ontologyRelTo.value.trim() || "B",
-    type: ontologyRelType.value.trim() || "关系",
-    desc: ontologyRelDesc.value.trim(),
-  });
-}
+// 兼容：旧的“保存到预览”按钮逻辑已被更真实的 CRUD 替代；保留空实现以避免误引用
+function addOntologyEntity() {}
+function addOntologyRelation() {}
 
 function addDataSource() {
   dataSources.value.unshift({
@@ -5224,662 +6009,3 @@ watch(
   gap: 12px;
   margin-top: 12px;
 }
-.ont-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.ont-title {
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.ont-desc {
-  font-size: 12px;
-  margin-bottom: 10px;
-}
-.ont-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.form-row label {
-  font-size: 12px;
-  color: #9fb2d4;
-  width: auto;
-}
-.ont-form input,
-.ont-form select,
-.ont-form textarea {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #e5ecff;
-}
-.ont-form button {
-  align-self: flex-start;
-  margin-top: 4px;
-}
-.ont-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.ont-item {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-}
-.ont-item strong {
-  color: #e5ecff;
-}
-.small {
-  font-size: 12px;
-}
-.card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(10px);
-}
-.card.wide {
-  grid-column: 1 / -1;
-}
-.map-and-list {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: start;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.map-card,
-.list-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  display: flex;
-  flex-direction: column;
-}
-.map-title {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.map {
-  width: 100%;
-  min-height: 260px;
-  height: 100%;
-  flex: 1 1 auto;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.map-hint {
-  margin-top: 6px;
-  font-size: 12px;
-}
-/* Leaflet 默认图标修正 */
-:global(.leaflet-container) {
-  background: #0c1220;
-  height: 100%;
-}
-:global(.leaflet-popup-content) {
-  color: #0c1220;
-}
-.list-card table tr.active {
-  background: rgba(79, 139, 255, 0.12);
-}
-.twin {
-  margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 12px;
-  background: linear-gradient(135deg, rgba(79, 139, 255, 0.08), rgba(61, 214, 208, 0.05));
-}
-.twin-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.twin-title {
-  font-weight: 700;
-}
-.twin-meta {
-  color: #9fb2d4;
-  font-size: 12px;
-}
-.twin-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.twin-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-}
-.tile {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-.tile.big {
-  grid-column: span 2;
-}
-.tile-top {
-  color: #9fb2d4;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-.tile-num {
-  font-size: 20px;
-  font-weight: 800;
-}
-.tile-num.small {
-  font-size: 16px;
-}
-.tile-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  margin-top: 8px;
-  overflow: hidden;
-}
-.tile-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4f8bff, #3dd6d0);
-}
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.badge.level-红 {
-  background: rgba(238, 9, 9, 0.2);
-  border-color: rgba(220, 38, 38, 0.6);
-  color: #fff;
-}
-.badge.level-橙 {
-  background: rgba(229, 107, 19, 0.2);
-  border-color: rgba(249, 115, 22, 0.6);
-  color: #fff;
-}
-.badge.level-黄 {
-  background: rgba(251, 191, 36, 0.2);
-  border-color: rgba(251, 191, 36, 0.6);
-  color: #fff;
-}
-.badge.level-绿 {
-  background: rgba(21, 128, 61, 0.2);
-  border-color: rgba(21, 128, 61, 0.6);
-  color: #fff;
-}
-.twin-factors {
-  border: 1px dashed rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.02);
-}
-.twin-subtitle {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.factor-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.factor-help {
-  margin-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 8px;
-}
-.help-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.field-help {
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 6px;
-}
-.field-help .help-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #93c5fd;
-  margin-bottom: 10px;
-}
-.field-help .help-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.field-help .help-item {
-  font-size: 13px;
-  line-height: 1.6;
-  color: #cbd5e1;
-}
-.field-help .help-item strong {
-  color: #60a5fa;
-  font-weight: 600;
-}
-.field-help .level-chip {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  margin: 0 2px;
-}
-.field-help .level-chip.red {
-  background: rgba(220, 38, 38, 0.2);
-  color: #fca5a5;
-  border: 1px solid rgba(220, 38, 38, 0.4);
-}
-.field-help .level-chip.orange {
-  background: rgba(249, 115, 22, 0.2);
-  color: #fdba74;
-  border: 1px solid rgba(249, 115, 22, 0.4);
-}
-.field-help .level-chip.yellow {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde047;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-}
-.field-help .level-chip.green {
-  background: rgba(21, 128, 61, 0.2);
-  color: #86efac;
-  border: 1px solid rgba(21, 128, 61, 0.4);
-}
-.help-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 6px;
-  font-size: 12px;
-}
-.help-grid strong {
-  display: inline-block;
-  min-width: 68px;
-  color: #e5ecff;
-}
-.help-grid span {
-  color: #9fb2d4;
-}
-.summary-tiles {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-}
-.s-tile {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-.s-label {
-  color: #9fb2d4;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-.s-value {
-  font-size: 20px;
-  font-weight: 800;
-}
-.s-sub {
-  font-size: 12px;
-}
-.s-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.level-chip.red {
-  background: rgba(220, 38, 38, 0.24);
-  border-color: rgba(220, 38, 38, 0.6);
-}
-.level-chip.orange {
-  background: rgba(249, 115, 22, 0.24);
-  border-color: rgba(249, 115, 22, 0.6);
-}
-.level-chip.yellow {
-  background: rgba(251, 191, 36, 0.24);
-  border-color: rgba(251, 191, 36, 0.6);
-}
-.level-chip.green {
-  background: rgba(21, 128, 61, 0.24);
-  border-color: rgba(21, 128, 61, 0.6);
-}
-.row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0;
-}
-label {
-  width: 48px;
-  color: #9fb2d4;
-  font-size: 12px;
-}
-input,
-textarea {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #e5ecff;
-}
-input::placeholder,
-textarea::placeholder {
-  color: #8fa0c4;
-}
-select {
-  width: 200px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #e5ecff;
-}
-button {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
-  color: #0c1220;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: transform 0.05s ease, box-shadow 0.1s ease;
-}
-button.ghost {
-  background: transparent;
-  color: #d8e5ff;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(79, 139, 255, 0.25);
-}
-.tbl {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.tbl th,
-.tbl td {
-  text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 8px 6px;
-}
-.tbl tbody tr:hover {
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-}
-.tbl tbody tr.level-红 {
-  background: rgba(220, 38, 38, 0.32);
-}
-.tbl tbody tr.level-橙 {
-  background: rgba(249, 115, 22, 0.32);
-}
-.tbl tbody tr.level-黄 {
-  background: rgba(251, 191, 36, 0.32);
-}
-.tbl tbody tr.level-绿 {
-  background: rgba(21, 128, 61, 0.32);
-}
-.muted {
-  color: #9fb2d4;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0 8px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #dfe8ff;
-  font-size: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-.layer-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 10px;
-  margin-top: 8px;
-}
-.layer-card {
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.02);
-}
-.layer-title {
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.layer-desc {
-  color: #9fb2d4;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-.layer-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.layer-list li {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-.node-title {
-  font-weight: 600;
-  font-size: 13px;
-}
-.node-detail {
-  color: #9fb2d4;
-  font-size: 12px;
-}
-.hint {
-  margin-top: 8px;
-  color: #9fb2d4;
-  font-size: 12px;
-}
-.box {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-}
-.report-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.report-card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.04);
-}
-.report-card.timeline {
-  grid-column: 1 / -1;
-}
-.rc-title {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.rc-main {
-  font-size: 16px;
-  font-weight: 700;
-}
-.rc-sub {
-  color: #9fb2d4;
-  font-size: 12px;
-}
-.rc-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 6px;
-}
-.rc-metrics span {
-  display: block;
-  color: #9fb2d4;
-  font-size: 11px;
-}
-.rc-metrics strong {
-  font-size: 16px;
-}
-.timeline-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.timeline-list li {
-  display: flex;
-  gap: 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.12);
-  padding-left: 10px;
-}
-.tl-time {
-  font-size: 12px;
-  color: #9fb2d4;
-  min-width: 150px;
-}
-.tl-body {
-  flex: 1;
-}
-.tl-type {
-  font-weight: 600;
-}
-.tl-payload {
-  font-size: 12px;
-  word-break: break-all;
-}
-
-/* 战报时间线（时间轴 v2：更强调时间效果与可读性） */
-.timeline-list.v2 {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.timeline-list.v2 li.tl-item {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.tl-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.tl-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
-  box-shadow: 0 0 0 4px rgba(79, 139, 255, 0.15);
-  margin-top: 4px;
-}
-.tl-line {
-  width: 2px;
-  flex: 1;
-  background: rgba(255, 255, 255, 0.12);
-  margin-top: 6px;
-  border-radius: 99px;
-}
-.tl-head {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 10px;
-  align-items: baseline;
-}
-.timeline-list.v2 .tl-time {
-  min-width: auto;
-  color: #c5d1ff;
-  text-align: right;
-}
-.tl-rel {
-  grid-column: 2;
-  font-size: 12px;
-  text-align: right;
-}
-.timeline-list.v2 .tl-type {
-  font-weight: 800;
-}
-.tl-kv {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.kv-row {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 10px;
-}
-.kv-k {
-  color: #c5d1ff;
-  font-size: 12px;
-}
-.kv-v {
-  color: #9fb2d4;
-  font-size: 12px;
-  word-break: break-word;
-}
-.pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 12px;
-  line-height: 1.4;
-}
-@media (max-width: 980px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-
-
