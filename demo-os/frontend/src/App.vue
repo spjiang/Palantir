@@ -3128,32 +3128,35 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
             <strong>{{ ontologyEntityEditing.mode === 'edit' ? '编辑实体' : '新建实体' }}</strong>
             <span class="muted small">（本地演示态，不影响现有页面）</span>
           </div>
-          <div class="ont-form">
-            <div class="form-row">
+        <div class="ont-form">
+          <div class="form-row">
               <label>实体ID（唯一）</label>
-              <input v-model="ontologyEntityForm.id" placeholder="如 road-segment" />
-            </div>
-            <div class="form-row">
-              <label>名称</label>
+              <div class="inline-grid">
+                <input v-model="ontologyEntityForm.id" placeholder="如 road-segment / entity-001" />
+                <button class="btn ghost" @click="regenOntologyEntityId">重新生成</button>
+              </div>
+          </div>
+          <div class="form-row">
+            <label>名称</label>
               <input v-model="ontologyEntityForm.label" placeholder="如 路段" />
-            </div>
-            <div class="form-row">
+          </div>
+          <div class="form-row">
               <label>分类</label>
               <select v-model="ontologyEntityForm.category">
-                <option>实体</option>
-                <option>事件</option>
-                <option>设施</option>
+              <option>实体</option>
+              <option>事件</option>
+              <option>设施</option>
                 <option>组织</option>
-                <option>资源</option>
-              </select>
-            </div>
-            <div class="form-row">
+              <option>资源</option>
+            </select>
+          </div>
+          <div class="form-row">
               <label>父类 / 继承</label>
               <select v-model="ontologyEntityForm.parent">
                 <option value="">无</option>
                 <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
               </select>
-            </div>
+          </div>
             <div class="form-row">
               <label>状态</label>
               <select v-model="ontologyEntityForm.status">
@@ -3161,18 +3164,25 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
                 <option>已发布</option>
                 <option>已停用</option>
               </select>
-            </div>
+        </div>
             <div class="form-row">
               <label>版本</label>
               <input v-model="ontologyEntityForm.version" placeholder="如 v1.0.0" />
-            </div>
+          </div>
             <div class="form-row">
               <label>维护单位</label>
-              <input v-model="ontologyEntityForm.owner_org" placeholder="如 市排水中心" />
+              <select v-model="ontologyEntityForm.owner_org">
+                <option v-for="o in ontologyOwnerOrgOptions" :key="o" :value="o">{{ o }}</option>
+              </select>
             </div>
             <div class="form-row">
               <label>标签（逗号分隔）</label>
               <input v-model="ontologyEntityForm.tags" placeholder="如 空间对象, 设施, 资产" />
+              <div class="preset-row">
+                <span class="muted small">快捷选择：</span>
+                <button v-for="t in ontologyTagPresets" :key="t" class="btn tiny ghost" @click="toggleOntologyTag(t)">{{ t }}</button>
+                <button class="btn tiny ghost" @click="clearOntologyTags">清空</button>
+              </div>
             </div>
             <div class="form-row">
               <label>说明</label>
@@ -3180,6 +3190,16 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
             </div>
             <div class="form-row">
               <label>属性定义（每行一条：属性名 | 类型 | 必填(0/1) | 来源 | 说明）</label>
+              <div class="preset-row">
+                <span class="muted small">模板：</span>
+                <select v-model="ontologyEntityPropPresetKey">
+                  <option value="">选择模板…</option>
+                  <option v-for="p in ontologyEntityPropPresets" :key="p.key" :value="p.key">{{ p.label }}</option>
+                </select>
+                <button class="btn tiny ghost" @click="applyEntityPropPreset('replace')" :disabled="!ontologyEntityPropPresetKey">覆盖填充</button>
+                <button class="btn tiny ghost" @click="applyEntityPropPreset('append')" :disabled="!ontologyEntityPropPresetKey">追加</button>
+                <button class="btn tiny ghost" @click="applyEntityPropPreset('clear')">清空</button>
+              </div>
               <textarea
                 v-model="ontologyEntityForm.props_text"
                 rows="5"
@@ -3270,38 +3290,41 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
             <strong>{{ ontologyRelEditing.mode === 'edit' ? '编辑关系' : '新建关系' }}</strong>
             <span class="muted small">（建议从实体列表里选 Domain/Range）</span>
           </div>
-          <div class="ont-form">
-            <div class="form-row">
+        <div class="ont-form">
+          <div class="form-row">
               <label>关系ID（唯一）</label>
-              <input v-model="ontologyRelForm.id" placeholder="如 located_in" />
-            </div>
-            <div class="form-row">
+              <div class="inline-grid">
+                <input v-model="ontologyRelForm.id" placeholder="如 located_in / rel-001" />
+                <button class="btn ghost" @click="regenOntologyRelId">重新生成</button>
+              </div>
+          </div>
+          <div class="form-row">
               <label>关系名称</label>
               <input v-model="ontologyRelForm.label" placeholder="如 位于/隶属" />
-            </div>
-            <div class="form-row">
+          </div>
+          <div class="form-row">
               <label>谓词（Predicate）</label>
               <input v-model="ontologyRelForm.predicate" placeholder="如 ex:locatedIn / hasOwner / nearBy" />
-            </div>
-            <div class="form-row">
+          </div>
+          <div class="form-row">
               <label>起点（Domain）</label>
               <select v-model="ontologyRelForm.from">
                 <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
               </select>
-            </div>
+          </div>
             <div class="form-row">
               <label>终点（Range）</label>
               <select v-model="ontologyRelForm.to">
                 <option v-for="e in ontologyEntities" :key="e.id" :value="e.id">{{ e.label }}（{{ e.id }}）</option>
               </select>
-            </div>
+        </div>
             <div class="form-row">
               <label>方向</label>
               <select v-model="ontologyRelForm.direction">
                 <option>单向</option>
                 <option>双向</option>
               </select>
-            </div>
+          </div>
             <div class="form-row">
               <label>反向关系（可选）</label>
               <input v-model="ontologyRelForm.inverse_of" placeholder="如 contains（对应 located_in 的反向）" />
@@ -3330,6 +3353,22 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
             </div>
             <div class="form-row">
               <label>关系属性（每行一条：属性名 | 类型 | 必填(0/1) | 来源 | 说明）</label>
+              <div class="preset-row">
+                <span class="muted small">模板：</span>
+                <select v-model="ontologyRelPropPresetKey">
+                  <option value="">选择模板…</option>
+                  <option v-for="p in ontologyRelPropPresets" :key="p.key" :value="p.key">{{ p.label }}</option>
+                </select>
+                <button class="btn tiny ghost" @click="applyRelPropPreset('replace')" :disabled="!ontologyRelPropPresetKey">覆盖填充</button>
+                <button class="btn tiny ghost" @click="applyRelPropPreset('append')" :disabled="!ontologyRelPropPresetKey">追加</button>
+                <button class="btn tiny ghost" @click="applyRelPropPreset('clear')">清空</button>
+              </div>
+              <div class="preset-row">
+                <span class="muted small">快捷：</span>
+                <button v-for="p in ontologyRelPropQuickAdd" :key="p.name" class="btn tiny ghost" @click="appendRelPropLine(p)">
+                  +{{ p.name }}
+                </button>
+              </div>
               <textarea v-model="ontologyRelForm.props_text" rows="4" placeholder="distance_m | number | 0 | GIS | 设施间距离（米）"></textarea>
             </div>
             <div class="form-row">
@@ -3430,8 +3469,8 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
         </div>
       </div>
     </div>
-  </section>
-</main>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -3880,6 +3919,81 @@ const ontologyEntities = ref<OntologyEntity[]>([
   },
 ]);
 
+const ontologyOwnerOrgOptions = [
+  "市排水中心",
+  "排水运维公司",
+  "城运中心",
+  "应急管理局",
+  "交警",
+  "街道办",
+] as const;
+
+const ontologyTagPresets = ["空间对象", "设施", "资产", "运行状态", "时间线", "处置", "组织", "管理域"] as const;
+
+const ontologyEntityPropPresets = [
+  {
+    key: "road",
+    label: "路段（RoadSegment）",
+    text:
+      "name | string | 1 | 主数据 | 路段名称\nadmin_area | string | 1 | GIS | 行政区\nlength_m | number | 0 | GIS | 路段长度（米）\nelevation_m | number | 0 | DEM | 平均高程（米）\nroad_grade | enum | 0 | 主数据 | 道路等级\nresponsible_org | string | 0 | 主数据 | 责任单位",
+  },
+  {
+    key: "pump",
+    label: "泵站（PumpStation）",
+    text:
+      "name | string | 1 | 主数据 | 泵站名称\nlocation | geo | 1 | GIS | 坐标/位置\ncapacity_m3s | number | 0 | 台账 | 设计流量（m³/s）\nstatus | enum | 1 | SCADA | 运行状态（开/停/故障）\nlast_maint_at | datetime | 0 | 运维 | 最近维护时间\nalarm_level | enum | 0 | SCADA | 告警等级",
+  },
+  {
+    key: "incident",
+    label: "事件（Incident）",
+    text:
+      "title | string | 1 | 工作流 | 事件标题\nlevel | enum | 1 | 工作流 | 事件级别\nstatus | enum | 1 | 工作流 | 状态机\ncreated_at | datetime | 1 | 工作流 | 创建时间\nsource | string | 0 | 工作流 | 事件来源（告警/人工/模型）\nevidence_refs | string | 0 | 证据库 | 证据引用ID列表",
+  },
+  {
+    key: "admin",
+    label: "片区/组织（AdminArea/Org）",
+    text: "name | string | 1 | 主数据 | 名称\ncode | string | 1 | 主数据 | 编码\nleader | string | 0 | 主数据 | 负责人\ncontact | string | 0 | 主数据 | 联系方式",
+  },
+] as const;
+
+const ontologyEntityPropPresetKey = ref<string>("road");
+
+const ontologyRelPropPresets = [
+  {
+    key: "spatial",
+    label: "空间/距离（Spatial）",
+    text:
+      "distance_m | number | 0 | GIS | 设施间距离（米）\nroute_eta_min | number | 0 | 计算 | 预计到达时间（分钟）\nconfidence | number | 0 | 计算 | 关联置信度（0-1）",
+  },
+  {
+    key: "evidence",
+    label: "证据/审计（Evidence/Audit）",
+    text:
+      "evidence_refs | string | 0 | 证据库 | 证据引用ID列表\nsource_system | string | 0 | 系统 | 关联来源系统\ncreated_at | datetime | 0 | 系统 | 关系创建时间\nupdated_at | datetime | 0 | 系统 | 关系更新时间",
+  },
+  {
+    key: "weight",
+    label: "权重/评分（Weight/Score）",
+    text:
+      "weight | number | 0 | 计算 | 关联权重\nscore | number | 0 | 模型 | 关系评分\nreason | string | 0 | 模型 | 评分依据/解释",
+  },
+  {
+    key: "workflow",
+    label: "工作流联动（Workflow）",
+    text:
+      "role | string | 0 | 工作流 | 角色（主目标/关联目标等）\nneed_approval | boolean | 0 | 工作流 | 是否需要审批\nsla_minutes | number | 0 | 工作流 | 关联的SLA（分钟）",
+  },
+] as const;
+
+const ontologyRelPropQuickAdd = [
+  { name: "distance_m", datatype: "number", required: false, source: "GIS", desc: "设施间距离（米）" },
+  { name: "confidence", datatype: "number", required: false, source: "计算", desc: "关联置信度（0-1）" },
+  { name: "evidence_refs", datatype: "string", required: false, source: "证据库", desc: "证据引用ID列表" },
+  { name: "weight", datatype: "number", required: false, source: "计算", desc: "关联权重" },
+] as const;
+
+const ontologyRelPropPresetKey = ref<string>("spatial");
+
 const ontologyRelations = ref<OntologyRelation[]>([
   {
     id: "located_in",
@@ -4096,7 +4210,7 @@ const ontologyEntityForm = reactive<{
   parent: "",
   status: "草稿",
   version: "v1.0.0",
-  owner_org: "市排水中心",
+  owner_org: ontologyOwnerOrgOptions[0],
   tags: "空间对象, 资产",
   desc: "",
   props_text: "name | string | 1 | 主数据 | 路段名称",
@@ -4258,29 +4372,95 @@ function resetOntologyEntityFormFrom(e?: OntologyEntity) {
   ontologyEntityForm.parent = e?.parent || "";
   ontologyEntityForm.status = e?.status || "草稿";
   ontologyEntityForm.version = e?.version || "v1.0.0";
-  ontologyEntityForm.owner_org = e?.owner_org || "";
+  ontologyEntityForm.owner_org = e?.owner_org || ontologyOwnerOrgOptions[0];
   ontologyEntityForm.tags = (e?.tags || []).join(", ");
   ontologyEntityForm.desc = e?.desc || "";
   ontologyEntityForm.props_text = propsToText(e?.props || []);
+}
+
+function categoryPrefix(category: string) {
+  const map: Record<string, string> = {
+    实体: "entity",
+    事件: "event",
+    设施: "facility",
+    组织: "org",
+    资源: "resource",
+  };
+  return map[category] || "entity";
+}
+function suggestEntityId(category: string) {
+  const prefix = categoryPrefix(category);
+  const re = new RegExp(`^${prefix}-(\\d{3})$`);
+  let max = 0;
+  ontologyEntities.value.forEach((e) => {
+    const m = String(e.id || "").match(re);
+    if (m?.[1]) max = Math.max(max, Number(m[1]));
+  });
+  const next = String(max + 1).padStart(3, "0");
+  return `${prefix}-${next}`;
+}
+function regenOntologyEntityId() {
+  ontologyEntityForm.id = suggestEntityId(ontologyEntityForm.category || "实体");
+}
+function normalizeTagList(s: string) {
+  return (s || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+function setTagList(tags: string[]) {
+  ontologyEntityForm.tags = tags.join(", ");
+}
+function toggleOntologyTag(tag: string) {
+  const tags = normalizeTagList(ontologyEntityForm.tags);
+  const idx = tags.indexOf(tag);
+  if (idx >= 0) tags.splice(idx, 1);
+  else tags.push(tag);
+  setTagList(tags);
+}
+function clearOntologyTags() {
+  ontologyEntityForm.tags = "";
+}
+
+function presetTextByKey(key: string) {
+  const found = ontologyEntityPropPresets.find((x) => x.key === key);
+  return found?.text || "";
+}
+function applyEntityPropPreset(mode: "replace" | "append" | "clear") {
+  if (mode === "clear") {
+    ontologyEntityForm.props_text = "";
+    return;
+  }
+  const text = presetTextByKey(ontologyEntityPropPresetKey.value);
+  if (!text) return;
+  if (mode === "replace") {
+    ontologyEntityForm.props_text = text;
+    return;
+  }
+  const cur = (ontologyEntityForm.props_text || "").trim();
+  ontologyEntityForm.props_text = cur ? `${cur}\n${text}` : text;
 }
 function startNewOntologyEntity() {
   ontologyEntityEditing.open = true;
   ontologyEntityEditing.mode = "new";
   ontologyEntityEditing.editingId = "";
   resetOntologyEntityFormFrom({
-    id: "",
+    id: suggestEntityId("实体"),
     label: "",
     category: "实体",
     parent: "",
     status: "草稿",
     version: "v1.0.0",
-    owner_org: "",
+    owner_org: ontologyOwnerOrgOptions[0],
     tags: [],
     desc: "",
     props: [],
     created_at: tsShort(),
     updated_at: tsShort(),
   });
+  ontologyEntityPropPresetKey.value = "road";
+  // 默认给一个模板，避免空白更像真实系统
+  ontologyEntityForm.props_text = presetTextByKey("road");
 }
 function editOntologyEntity(id: string) {
   const found = ontologyEntities.value.find((x) => x.id === id);
@@ -4372,12 +4552,54 @@ function resetOntologyRelFormFrom(r?: OntologyRelation) {
   ontologyRelForm.props_text = propsToText(r?.props || []);
   ontologyRelForm.constraint_shacl = r?.constraint_shacl || "";
 }
+
+function suggestRelId() {
+  const re = /^rel-(\d{3})$/;
+  let max = 0;
+  ontologyRelations.value.forEach((r) => {
+    const m = String(r.id || "").match(re);
+    if (m?.[1]) max = Math.max(max, Number(m[1]));
+  });
+  return `rel-${String(max + 1).padStart(3, "0")}`;
+}
+function regenOntologyRelId() {
+  ontologyRelForm.id = suggestRelId();
+}
+function relPresetTextByKey(key: string) {
+  const found = ontologyRelPropPresets.find((x) => x.key === key);
+  return found?.text || "";
+}
+function applyRelPropPreset(mode: "replace" | "append" | "clear") {
+  if (mode === "clear") {
+    ontologyRelForm.props_text = "";
+    return;
+  }
+  const text = relPresetTextByKey(ontologyRelPropPresetKey.value);
+  if (!text) return;
+  if (mode === "replace") {
+    ontologyRelForm.props_text = text;
+    return;
+  }
+  const cur = (ontologyRelForm.props_text || "").trim();
+  ontologyRelForm.props_text = cur ? `${cur}\n${text}` : text;
+}
+function appendRelPropLine(p: { name: string; datatype: string; required: boolean; source: string; desc: string }) {
+  const line = `${p.name} | ${p.datatype} | ${p.required ? "1" : "0"} | ${p.source} | ${p.desc}`;
+  const cur = (ontologyRelForm.props_text || "").trim();
+  // 避免重复追加同名属性行（粗略匹配行首）
+  const exists = cur
+    .split("\n")
+    .map((x) => x.trim())
+    .some((x) => x.startsWith(`${p.name} |`) || x === p.name);
+  if (exists) return;
+  ontologyRelForm.props_text = cur ? `${cur}\n${line}` : line;
+}
 function startNewOntologyRelation() {
   ontologyRelEditing.open = true;
   ontologyRelEditing.mode = "new";
   ontologyRelEditing.editingId = "";
   resetOntologyRelFormFrom({
-    id: "",
+    id: suggestRelId(),
     label: "",
     predicate: "ex:",
     from: ontologyEntities.value[0]?.id || "",
@@ -4394,6 +4616,8 @@ function startNewOntologyRelation() {
     created_at: tsShort(),
     updated_at: tsShort(),
   });
+  ontologyRelPropPresetKey.value = "spatial";
+  ontologyRelForm.props_text = relPresetTextByKey("spatial");
 }
 function editOntologyRelation(id: string) {
   const found = ontologyRelations.value.find((x) => x.id === id);
@@ -6358,6 +6582,21 @@ watch(
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.preset-row select {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5ecff;
 }
 @media (max-width: 980px) {
   .ont-toolbar {
