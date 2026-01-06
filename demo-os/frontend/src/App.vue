@@ -114,6 +114,39 @@
               当前目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}
             </span>
           </div>
+
+          <div v-if="selectedTargetObj" class="plan-card">
+            <div class="plan-title">选中预警详情（L3 风险推理输出）</div>
+            <div class="plan-grid">
+              <div class="plan-item">
+                <span>对象</span>
+                <strong>{{ targetLabel(selectedTargetObj.target_id, selectedTargetObj.area_id || areaId) }}</strong>
+              </div>
+              <div class="plan-item">
+                <span>风险等级</span>
+                <strong>{{ selectedTargetObj.risk_level }}</strong>
+              </div>
+              <div class="plan-item">
+                <span>风险分数</span>
+                <strong>{{ selectedTargetObj.risk_score.toFixed(2) }}</strong>
+              </div>
+              <div class="plan-item">
+                <span>置信度</span>
+                <strong>{{ selectedTargetObj.confidence.toFixed(2) }}</strong>
+              </div>
+              <div class="plan-item" style="grid-column: 1 / -1;">
+                <span>解释因子</span>
+                <strong class="muted">{{ (selectedTargetObj.explain_factors || []).slice(0, 6).join(" / ") || "暂无" }}</strong>
+              </div>
+            </div>
+
+            <div v-if="loadingObjectState" class="muted small" style="margin-top:8px;">对象属性加载中...</div>
+            <div v-else-if="objectStateCache[selectedTarget]" class="muted small" style="margin-top:8px;">
+              <div><strong>对象属性</strong>：{{ objectStateCache[selectedTarget]?.attrs?.name || "-" }} / {{ objectStateCache[selectedTarget]?.attrs?.admin_area || "-" }}</div>
+              <div><strong>关键特征</strong>：雨强 {{ objectStateCache[selectedTarget]?.features?.rain_now_mmph ?? "-" }} mm/h；1h雨量 {{ objectStateCache[selectedTarget]?.features?.rain_1h_mm ?? "-" }}；水位 {{ objectStateCache[selectedTarget]?.features?.water_level_m ?? "-" }} m；泵站 {{ objectStateCache[selectedTarget]?.features?.pump_status ?? "-" }}</div>
+            </div>
+          </div>
+
           <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
           <div class="row">
             <button @click="sendChat" :disabled="!selectedTarget">发送</button>
@@ -144,7 +177,7 @@
                       <th>任务类型</th>
                       <th>目标</th>
                       <th>责任单位</th>
-                      <th>SLA</th>
+                      <th>SLA（时限）</th>
                       <th>必传证据</th>
                       <th>备注</th>
                     </tr>
@@ -164,7 +197,7 @@
                           {{ ownerOrgView(t.owner_org || t.owner).name }}
                         </span>
                       </td>
-                      <td>{{ (t.sla_minutes ?? t.sla ?? "-") }}</td>
+                      <td>{{ slaView(t.sla_minutes ?? t.sla) }}</td>
                       <td class="muted">{{ (t.required_evidence || t.evidence || []).join(" / ") }}</td>
                       <td class="muted">{{ t.detail || t.note || "-" }}</td>
                     </tr>
@@ -211,7 +244,7 @@
                     {{ ownerOrgView(t.owner_org).name }}
                   </span>
                 </td>
-                <td>{{ t.status }}</td>
+                <td>{{ taskStatusView(t.status) }}</td>
               </tr>
             </tbody>
           </table>
@@ -245,7 +278,7 @@
                     {{ ownerOrgView(t.owner_org).name }}
                   </span>
                 </td>
-                <td>{{ t.status }}</td>
+                <td>{{ taskStatusView(t.status) }}</td>
               </tr>
             </tbody>
           </table>
@@ -258,37 +291,51 @@
             <button @click="loadReport" :disabled="!incidentId">生成战报</button>
             <button class="ghost" @click="goStep('map')">回到第一步</button>
           </div>
-          <div v-if="reportData" class="report-grid">
-            <div class="report-card">
-              <div class="rc-title">事件</div>
-              <div class="rc-main">{{ reportData.title || reportData.incident_id }}</div>
-              <div class="rc-sub">状态：{{ reportData.status }}</div>
+        <div v-if="reportData" class="report-grid">
+          <div class="report-card">
+            <div class="rc-title">事件概览</div>
+            <div class="rc-main">{{ reportData.title || reportData.incident_id }}</div>
+            <div class="rc-sub">状态：{{ reportData.status }}</div>
+            <div class="rc-sub">事件ID：{{ reportData.incident_id }}</div>
+          </div>
+          <div class="report-card">
+            <div class="rc-title">任务指标</div>
+            <div class="rc-metrics">
+              <div><span>总数</span><strong>{{ reportData.metrics?.task_total ?? "-" }}</strong></div>
+              <div><span>完成</span><strong>{{ reportData.metrics?.task_done ?? "-" }}</strong></div>
+              <div><span>完成率</span><strong>{{ (reportData.metrics?.task_done_rate ?? 0) | percent }}</strong></div>
             </div>
-            <div class="report-card">
-              <div class="rc-title">任务指标</div>
-              <div class="rc-metrics">
-                <div><span>总数</span><strong>{{ reportData.metrics?.task_total ?? "-" }}</strong></div>
-                <div><span>完成</span><strong>{{ reportData.metrics?.task_done ?? "-" }}</strong></div>
-                <div><span>完成率</span><strong>{{ (reportData.metrics?.task_done_rate ?? 0) | percent }}</strong></div>
-              </div>
-            </div>
-            <div class="report-card timeline">
-              <div class="rc-title">时间线</div>
-              <ul class="timeline-list">
-                <li v-for="(e, idx) in reportData.timeline" :key="idx">
-                  <div class="tl-time">{{ formatTime(e.time) }}</div>
-                  <div class="tl-body">
+          </div>
+          <div class="report-card timeline">
+            <div class="rc-title">处置时间线（时间轴）</div>
+            <ul class="timeline-list v2">
+              <li v-for="(e, idx) in reportData.timeline" :key="idx" class="tl-item">
+                <div class="tl-left">
+                  <div class="tl-dot"></div>
+                  <div class="tl-line" v-if="idx !== reportData.timeline.length - 1"></div>
+                </div>
+                <div class="tl-right">
+                  <div class="tl-head">
                     <div class="tl-type">{{ e.type }}</div>
-                    <div class="tl-payload muted">{{ stringify(e.payload) }}</div>
+                    <div class="tl-time">{{ formatTime(e.time) }}</div>
+                    <div class="tl-rel muted">{{ relativeTime(e.time) }}</div>
                   </div>
-                </li>
-              </ul>
-            </div>
+                  <div class="tl-kv" v-if="payloadEntries(e.payload).length">
+                    <div v-for="kv in payloadEntries(e.payload)" :key="kv.k" class="kv-row">
+                      <span class="kv-k">{{ kv.k }}</span>
+                      <span class="kv-v muted">{{ kv.v }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="muted small">无附加信息</div>
+                </div>
+              </li>
+            </ul>
           </div>
-          <div class="box">
-            <div class="muted">原始 JSON：</div>
-            <pre class="pre">{{ reportOut }}</pre>
-          </div>
+        </div>
+        <details class="box" v-if="reportOut">
+          <summary class="muted">原始 JSON（调试）</summary>
+          <pre class="pre">{{ reportOut }}</pre>
+        </details>
         </div>
       </section>
     </main>
@@ -344,7 +391,7 @@
                   @click="pickTarget(it.target_id)"
                   :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
                 >
-              <td>{{ it.target_id }}</td>
+              <td>{{ targetLabel(it.target_id, it.area_id || areaId) }}</td>
               <td>{{ it.risk_level }}</td>
               <td>{{ it.risk_score.toFixed(2) }}</td>
               <td>{{ it.confidence.toFixed(2) }}</td>
@@ -362,7 +409,7 @@
           <div class="s-tile">
             <div class="s-label">最高分</div>
             <div class="s-value">{{ riskSummary.maxScore.toFixed(2) || "-" }}</div>
-            <div class="s-sub muted" v-if="riskSummary.maxId">目标：{{ riskSummary.maxId }}</div>
+            <div class="s-sub muted" v-if="riskSummary.maxId">目标：{{ targetLabel(riskSummary.maxId, areaId) }}</div>
           </div>
           <div class="s-tile">
             <div class="s-label">分布</div>
@@ -376,7 +423,7 @@
         </div>
         <div v-if="selectedTargetObj" class="twin">
           <div class="twin-header">
-            <div class="twin-title">数字孪生视图 · {{ selectedTargetObj.target_id }}</div>
+            <div class="twin-title">数字孪生视图 · {{ targetLabel(selectedTargetObj.target_id, selectedTargetObj.area_id || areaId) }}</div>
             <div class="twin-meta">风险 {{ selectedTargetObj.risk_level }} · 置信度 {{ selectedTargetObj.confidence.toFixed(2) }}</div>
           </div>
           <div class="twin-body">
@@ -447,7 +494,7 @@
           <button @click="createIncident">新建事件</button>
         </div>
         <div class="chips">
-          <span class="chip muted">当前区域：{{ areaId }}</span>
+          <span class="chip muted">当前区域：{{ areaLabel(areaId) }}</span>
           <span class="chip" :class="{ muted: !selectedTarget }">当前目标：{{ selectedTarget || "未选择" }}</span>
         </div>
         <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
@@ -487,7 +534,7 @@
                   {{ ownerOrgView(t.owner_org).name }}
                 </span>
               </td>
-              <td>{{ t.status }}</td>
+              <td>{{ taskStatusView(t.status) }}</td>
             </tr>
           </tbody>
         </table>
@@ -500,9 +547,10 @@
         </div>
         <div v-if="reportData" class="report-grid">
           <div class="report-card">
-            <div class="rc-title">事件</div>
+            <div class="rc-title">事件概览</div>
             <div class="rc-main">{{ reportData.title || reportData.incident_id }}</div>
             <div class="rc-sub">状态：{{ reportData.status }}</div>
+            <div class="rc-sub">事件ID：{{ reportData.incident_id }}</div>
           </div>
           <div class="report-card">
             <div class="rc-title">任务指标</div>
@@ -513,22 +561,35 @@
             </div>
           </div>
           <div class="report-card timeline">
-            <div class="rc-title">时间线</div>
-            <ul class="timeline-list">
-              <li v-for="(e, idx) in reportData.timeline" :key="idx">
-                <div class="tl-time">{{ formatTime(e.time) }}</div>
-                <div class="tl-body">
-                  <div class="tl-type">{{ e.type }}</div>
-                  <div class="tl-payload muted">{{ stringify(e.payload) }}</div>
+            <div class="rc-title">处置时间线（时间轴）</div>
+            <ul class="timeline-list v2">
+              <li v-for="(e, idx) in reportData.timeline" :key="idx" class="tl-item">
+                <div class="tl-left">
+                  <div class="tl-dot"></div>
+                  <div class="tl-line" v-if="idx !== reportData.timeline.length - 1"></div>
+                </div>
+                <div class="tl-right">
+                  <div class="tl-head">
+                    <div class="tl-type">{{ e.type }}</div>
+                    <div class="tl-time">{{ formatTime(e.time) }}</div>
+                    <div class="tl-rel muted">{{ relativeTime(e.time) }}</div>
+                  </div>
+                  <div class="tl-kv" v-if="payloadEntries(e.payload).length">
+                    <div v-for="kv in payloadEntries(e.payload)" :key="kv.k" class="kv-row">
+                      <span class="kv-k">{{ kv.k }}</span>
+                      <span class="kv-v muted">{{ kv.v }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="muted small">无附加信息</div>
                 </div>
               </li>
             </ul>
           </div>
         </div>
-        <div class="box">
-          <div class="muted">原始 JSON：</div>
-        <pre class="pre">{{ reportOut }}</pre>
-        </div>
+        <details class="box" v-if="reportOut">
+          <summary class="muted">原始 JSON（调试）</summary>
+          <pre class="pre">{{ reportOut }}</pre>
+        </details>
       </section>
     </main>
 
@@ -3195,6 +3256,8 @@ const selectedTarget = ref<string>("");
 
 // 展示层：把区域/对象 ID 映射成更贴近真实的中文名称（不影响后端数据与接口参数）
 const objectLabelCache = ref<Record<string, { name?: string; admin_area?: string }>>({});
+const objectStateCache = ref<Record<string, any>>({});
+const loadingObjectState = ref(false);
 function areaLabel(area: string | undefined | null) {
   const key = (area || "").trim();
   const table: Record<string, string> = {
@@ -3285,6 +3348,29 @@ async function warmObjectLabels(ids: string[], area?: string) {
   );
 }
 
+async function ensureObjectState(objectId: string) {
+  const id = (objectId || "").trim();
+  if (!id) return;
+  if (objectStateCache.value[id]) return;
+  if (loadingObjectState.value) return;
+  loadingObjectState.value = true;
+  try {
+    const { data } = await axios.get(`${apiBase}/objects/${id}`);
+    objectStateCache.value[id] = data;
+    // 顺便把中文名缓存补齐，便于全局展示统一
+    if (data?.attrs?.name || data?.attrs?.admin_area) {
+      objectLabelCache.value[id] = {
+        name: data?.attrs?.name,
+        admin_area: data?.attrs?.admin_area || (data?.area_id ? areaLabel(data?.area_id) : undefined),
+      };
+    }
+  } catch {
+    objectStateCache.value[id] = null;
+  } finally {
+    loadingObjectState.value = false;
+  }
+}
+
 const activePage = ref<"flow" | "main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
 
 const flowStep = ref<"map" | "agent" | "tasks" | "ack" | "report">("map");
@@ -3306,6 +3392,32 @@ function ownerOrgView(org: string | undefined | null) {
     "通信": { name: "通信保障", desc: "基站/链路保障、应急通信车与指挥通信保障", tone: "gray" },
   };
   return table[key] || { name: key || "-", desc: "未配置说明（可按需补充映射）", tone: "gray" };
+}
+
+function slaView(sla: any) {
+  const n = Number(sla);
+  if (!Number.isFinite(n) || n <= 0) return "-";
+  const level = n <= 20 ? "紧急" : n <= 30 ? "高优先" : n <= 60 ? "常规" : "可延期";
+  return `${n} 分钟（${level}）`;
+}
+
+function taskStatusView(status: string | undefined | null) {
+  const s = (status || "").trim().toLowerCase();
+  const table: Record<string, string> = {
+    pending: "待执行",
+    created: "已创建",
+    in_progress: "执行中",
+    processing: "执行中",
+    running: "执行中",
+    done: "已完成",
+    completed: "已完成",
+    success: "已完成",
+    failed: "失败",
+    rejected: "已驳回",
+    cancelled: "已取消",
+    canceled: "已取消",
+  };
+  return table[s] || (status || "-");
 }
 const flowProgress = computed(() => {
   return flowStep.value === "map"
@@ -3574,6 +3686,7 @@ function pickTarget(targetId: string) {
   const seedId = toSeedObjectId(targetId, areaId.value);
   selectedTarget.value = seedId || targetId;
   warmObjectLabels([selectedTarget.value, targetId], areaId.value).catch(() => {});
+  ensureObjectState(selectedTarget.value).catch(() => {});
   chatInput.value = `请研判 ${targetLabel(selectedTarget.value, areaId.value)} 并给出任务包建议`;
   agentConfirmed.value = false;
   agentResult.value = null;
@@ -3793,6 +3906,37 @@ function formatTime(t: string | undefined) {
   }
 }
 
+function relativeTime(t: string | undefined) {
+  if (!t) return "";
+  try {
+    const d = new Date(t).getTime();
+    const now = Date.now();
+    const diff = Math.max(0, now - d);
+    const sec = Math.round(diff / 1000);
+    if (sec < 60) return `${sec} 秒前`;
+    const min = Math.round(sec / 60);
+    if (min < 60) return `${min} 分钟前`;
+    const hr = Math.round(min / 60);
+    if (hr < 24) return `${hr} 小时前`;
+    const day = Math.round(hr / 24);
+    return `${day} 天前`;
+  } catch {
+    return "";
+  }
+}
+
+function payloadEntries(p: any) {
+  if (!p || typeof p !== "object") return [];
+  try {
+    return Object.entries(p).map(([k, v]) => {
+      const vv = typeof v === "string" ? v : JSON.stringify(v);
+      return { k, v: vv };
+    });
+  } catch {
+    return [];
+  }
+}
+
 function stringify(obj: any) {
   try {
     return JSON.stringify(obj);
@@ -3908,6 +4052,15 @@ watch(
   () => selectedTarget.value,
   () => {
     renderMap();
+  }
+);
+
+watch(
+  () => [activePage.value, flowStep.value, selectedTarget.value] as const,
+  () => {
+    if (activePage.value === "flow" && flowStep.value === "agent" && selectedTarget.value) {
+      ensureObjectState(selectedTarget.value).catch(() => {});
+    }
   }
 );
 </script>
@@ -5542,6 +5695,81 @@ button:hover {
 .tl-payload {
   font-size: 12px;
   word-break: break-all;
+}
+
+/* 战报时间线（时间轴 v2：更强调时间效果与可读性） */
+.timeline-list.v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.timeline-list.v2 li.tl-item {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.tl-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tl-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
+  box-shadow: 0 0 0 4px rgba(79, 139, 255, 0.15);
+  margin-top: 4px;
+}
+.tl-line {
+  width: 2px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.12);
+  margin-top: 6px;
+  border-radius: 99px;
+}
+.tl-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.timeline-list.v2 .tl-time {
+  min-width: auto;
+  color: #c5d1ff;
+  text-align: right;
+}
+.tl-rel {
+  grid-column: 2;
+  font-size: 12px;
+  text-align: right;
+}
+.timeline-list.v2 .tl-type {
+  font-weight: 800;
+}
+.tl-kv {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kv-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+}
+.kv-k {
+  color: #c5d1ff;
+  font-size: 12px;
+}
+.kv-v {
+  color: #9fb2d4;
+  font-size: 12px;
+  word-break: break-word;
 }
 .pre {
   white-space: pre-wrap;
