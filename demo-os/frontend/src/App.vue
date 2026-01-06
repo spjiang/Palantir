@@ -328,7 +328,13 @@
                           <summary>查看证据</summary>
                           <div class="evi-grid">
                             <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
-                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" @error="onEvidenceImgError" />
+                              <img
+                                :src="evidenceView(kv.raw).photo_src"
+                                alt="证据照片"
+                                loading="lazy"
+                                @error="onEvidenceImgError"
+                                @click="openImagePreview(evidenceView(kv.raw).photo_src)"
+                              />
                             </div>
                             <div class="evi-photo placeholder" v-else>无照片</div>
                             <div class="evi-map" v-if="evidenceView(kv.raw).has_gps" :id="evidenceMapDomId('flow', idx)"></div>
@@ -609,7 +615,13 @@
                           <summary>查看证据</summary>
                           <div class="evi-grid">
                             <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
-                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" @error="onEvidenceImgError" />
+                              <img
+                                :src="evidenceView(kv.raw).photo_src"
+                                alt="证据照片"
+                                loading="lazy"
+                                @error="onEvidenceImgError"
+                                @click="openImagePreview(evidenceView(kv.raw).photo_src)"
+                              />
                             </div>
                             <div class="evi-photo placeholder" v-else>无照片</div>
                             <div class="evi-map" v-if="evidenceView(kv.raw).has_gps" :id="evidenceMapDomId('main', idx)"></div>
@@ -3507,6 +3519,18 @@ TimelineEvent(tl-003) --关联--> 任务包(task-pack-001)
     </div>
       </section>
     </main>
+<!-- 全局：图片大图预览弹框（证据照片等） -->
+<div v-if="imagePreview.open" class="img-modal" @click.self="closeImagePreview">
+  <div class="img-modal-card" role="dialog" aria-modal="true">
+    <div class="img-modal-head">
+      <strong>图片预览</strong>
+      <button class="btn tiny ghost" @click="closeImagePreview">关闭</button>
+    </div>
+    <div class="img-modal-body">
+      <img :src="imagePreview.src" alt="预览大图" @error="onPreviewImgError" />
+    </div>
+  </div>
+</div>
   </div>
 </template>
 
