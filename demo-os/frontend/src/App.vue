@@ -39,7 +39,7 @@
           <div class="flow-meta">
             <span class="chip">当前进度：{{ flowProgress }}%</span>
             <span class="chip muted">事件ID：{{ incidentId || "未创建" }}</span>
-            <span class="chip muted" :title="selectedTarget || ''">目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}</span>
+            <span class="chip muted">目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}</span>
             <span class="chip muted">区域：{{ areaLabel(areaId) }}</span>
           </div>
           <div class="flow-steps">
@@ -85,7 +85,7 @@
                     @click="pickTarget(it.target_id)"
                     :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
                   >
-                    <td :title="it.target_id">{{ targetLabel(it.target_id, it.area_id || areaId) }}</td>
+                    <td>{{ targetLabel(it.target_id, it.area_id || areaId) }}</td>
                     <td>{{ it.risk_level }}</td>
                     <td>{{ it.risk_score.toFixed(2) }}</td>
                     <td>{{ it.confidence.toFixed(2) }}</td>
@@ -110,7 +110,7 @@
           </div>
           <div class="chips">
             <span class="chip muted">当前区域：{{ areaLabel(areaId) }}</span>
-            <span class="chip" :class="{ muted: !selectedTarget }" :title="selectedTarget || ''">
+            <span class="chip" :class="{ muted: !selectedTarget }">
               当前目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}
             </span>
           </div>
@@ -128,7 +128,7 @@
                 <div class="plan-title">研判摘要</div>
                 <div class="plan-grid">
                   <div class="plan-item"><span>事件ID</span><strong>{{ agentResult.incident_id || incidentId || "-" }}</strong></div>
-                  <div class="plan-item"><span>目标</span><strong :title="agentResult.target_id || selectedTarget || ''">{{ targetLabel(agentResult.target_id || selectedTarget, agentResult.area_id || areaId) }}</strong></div>
+                  <div class="plan-item"><span>目标</span><strong>{{ targetLabel(agentResult.target_id || selectedTarget, agentResult.area_id || areaId) }}</strong></div>
                   <div class="plan-item"><span>区域</span><strong>{{ areaLabel(agentResult.area_id || areaId) }}</strong></div>
                   <div class="plan-item"><span>建议</span><strong>{{ agentResult.summary || agentResult.message || "-" }}</strong></div>
                 </div>
@@ -156,7 +156,7 @@
                     >
                       <td class="muted">{{ idx + 1 }}</td>
                       <td>{{ t.task_type || t.type || "-" }}</td>
-                      <td :title="t.target_object_id || t.target_id || agentResult.target_id || selectedTarget || ''">
+                      <td>
                         {{ targetLabel(t.target_object_id || t.target_id || agentResult.target_id || selectedTarget, agentResult.area_id || areaId) }}
                       </td>
                       <td>
@@ -205,7 +205,7 @@
               <tr v-for="t in tasks" :key="t.task_id">
                 <td class="muted">{{ t.task_id }}</td>
                 <td>{{ t.task_type }}</td>
-                <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+                <td>{{ targetLabel(t.target_object_id, areaId) }}</td>
                 <td>
                   <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
                     {{ ownerOrgView(t.owner_org).name }}
@@ -239,7 +239,7 @@
               <tr v-for="t in tasks" :key="t.task_id">
                 <td class="muted">{{ t.task_id }}</td>
                 <td>{{ t.task_type }}</td>
-                <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+                <td>{{ targetLabel(t.target_object_id, areaId) }}</td>
                 <td>
                   <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
                     {{ ownerOrgView(t.owner_org).name }}
@@ -481,7 +481,7 @@
             <tr v-for="t in tasks" :key="t.task_id">
               <td class="muted">{{ t.task_id }}</td>
               <td>{{ t.task_type }}</td>
-              <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+              <td>{{ targetLabel(t.target_object_id, areaId) }}</td>
               <td>
                 <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
                   {{ ownerOrgView(t.owner_org).name }}
@@ -3222,7 +3222,21 @@ function toSeedObjectId(targetId: string, area: string | undefined | null) {
 function fallbackTargetCn(targetId: string) {
   // 兼容两种格式：a-001-road-008 / road-008
   const m = targetId.match(/(?:^|-)road-(\d{1,3})$/i) || targetId.match(/^road-(\d{1,3})$/i);
-  if (m?.[1]) return `路段${parseInt(m[1], 10)}`;
+  if (m?.[1]) {
+    const idx = parseInt(m[1], 10);
+    const roadNames = [
+      "东北旺西路",
+      "东北旺中路",
+      "后厂村路",
+      "软件园二号路",
+      "信息路",
+      "上地西路",
+      "西北旺东路",
+      "永丰路",
+    ];
+    const rn = roadNames[(idx - 1) % roadNames.length];
+    return `${rn}（第${idx}段）`;
+  }
   return targetId;
 }
 
@@ -3556,8 +3570,11 @@ async function loadTopN() {
 }
 
 function pickTarget(targetId: string) {
-  selectedTarget.value = targetId;
-  chatInput.value = `请研判 ${targetId} 并给出任务包建议`;
+  // 内部统一使用后端真实 object_id（例如 a-001-road-008）；但对用户展示中文名称
+  const seedId = toSeedObjectId(targetId, areaId.value);
+  selectedTarget.value = seedId || targetId;
+  warmObjectLabels([selectedTarget.value, targetId], areaId.value).catch(() => {});
+  chatInput.value = `请研判 ${targetLabel(selectedTarget.value, areaId.value)} 并给出任务包建议`;
   agentConfirmed.value = false;
   agentResult.value = null;
   agentResultError.value = "";
@@ -3608,7 +3625,7 @@ function confirmAgentAndNext() {
 
 function fillOneClick() {
   chatInput.value = selectedTarget.value
-    ? `请研判 ${selectedTarget.value} 并一键下发任务包`
+    ? `请研判 ${targetLabel(selectedTarget.value, areaId.value)} 并一键下发任务包`
     : "请研判并一键下发任务包";
 }
 
@@ -3870,7 +3887,7 @@ function renderMap() {
     })
       .addTo(map!)
       .bindPopup(
-        `<strong>${targetLabel(item.target_id, item.area_id || areaId.value)}</strong><br/><span style="color:#9fb2d4">${item.target_id}</span><br/>风险: ${item.risk_level}<br/>分数: ${item.risk_score.toFixed(
+        `<strong>${targetLabel(item.target_id, item.area_id || areaId.value)}</strong><br/>风险: ${item.risk_level}<br/>分数: ${item.risk_score.toFixed(
           2,
         )}<br/>置信度: ${item.confidence.toFixed(2)}<br/>解释: ${(item.explain_factors || []).slice(0, 3).join(" / ")}`
       )
