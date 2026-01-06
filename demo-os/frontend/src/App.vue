@@ -325,8 +325,29 @@
                       <span class="kv-v muted" v-if="kv.k !== 'evidence'">{{ kv.v }}</span>
                       <span class="kv-v muted" v-else>
                         <details class="kv-details">
-                          <summary>查看证据（JSON）</summary>
+                          <summary>查看证据</summary>
+                          <div class="evi-grid">
+                            <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
+                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" />
+                            </div>
+                            <div class="evi-photo placeholder" v-else>无照片</div>
+                            <div class="evi-meta">
+                              <div class="evi-row" v-if="evidenceView(kv.raw).has_gps">
+                                <span class="chip blue">定位</span>
+                                <span class="muted"
+                                  >纬度 {{ evidenceView(kv.raw).lat }} ｜ 经度 {{ evidenceView(kv.raw).lng }}</span
+                                >
+                              </div>
+                              <div class="evi-row" v-if="evidenceView(kv.raw).has_gps">
+                                <a class="evi-link" :href="evidenceView(kv.raw).map_url" target="_blank" rel="noreferrer">打开地图</a>
+                                <button class="btn tiny ghost" @click="copyText(evidenceView(kv.raw).gps_raw)">复制坐标</button>
+                              </div>
+                              <details class="kv-details sub">
+                                <summary class="muted">查看证据（JSON）</summary>
                           <pre class="pre pre-mini">{{ prettyJson(kv.raw) }}</pre>
+                              </details>
+                            </div>
+                          </div>
                         </details>
                       </span>
                     </div>
@@ -574,15 +595,7 @@
                 </div>
                 <div class="tl-right">
                   <div class="tl-head">
-<<<<<<< Current (Your changes)
-<<<<<<< Current (Your changes)
-                  <div class="tl-type">{{ e.type }}</div>
-=======
                   <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
->>>>>>> Incoming (Background Agent changes)
-=======
-                  <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
->>>>>>> Incoming (Background Agent changes)
                     <div class="tl-time">{{ formatTime(e.time) }}</div>
                     <div class="tl-rel muted">{{ relativeTime(e.time) }}</div>
                   </div>
@@ -592,8 +605,29 @@
                       <span class="kv-v muted" v-if="kv.k !== 'evidence'">{{ kv.v }}</span>
                       <span class="kv-v muted" v-else>
                         <details class="kv-details">
-                          <summary>查看证据（JSON）</summary>
+                          <summary>查看证据</summary>
+                          <div class="evi-grid">
+                            <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
+                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" />
+                            </div>
+                            <div class="evi-photo placeholder" v-else>无照片</div>
+                            <div class="evi-meta">
+                              <div class="evi-row" v-if="evidenceView(kv.raw).has_gps">
+                                <span class="chip blue">定位</span>
+                                <span class="muted"
+                                  >纬度 {{ evidenceView(kv.raw).lat }} ｜ 经度 {{ evidenceView(kv.raw).lng }}</span
+                                >
+                              </div>
+                              <div class="evi-row" v-if="evidenceView(kv.raw).has_gps">
+                                <a class="evi-link" :href="evidenceView(kv.raw).map_url" target="_blank" rel="noreferrer">打开地图</a>
+                                <button class="btn tiny ghost" @click="copyText(evidenceView(kv.raw).gps_raw)">复制坐标</button>
+                              </div>
+                              <details class="kv-details sub">
+                                <summary class="muted">查看证据（JSON）</summary>
                           <pre class="pre pre-mini">{{ prettyJson(kv.raw) }}</pre>
+                              </details>
+                            </div>
+                          </div>
                         </details>
                       </span>
                     </div>
@@ -5166,6 +5200,98 @@ function prettyJson(v: any) {
   }
 }
 
+// 证据展示：尽量把 photo/gps 从 JSON 中“可视化”
+const EVIDENCE_DEMO_PHOTO =
+  "data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A//www.w3.org/2000/svg'%20width%3D'640'%20height%3D'360'%3E%3Crect%20width%3D'640'%20height%3D'360'%20fill%3D'%230f172a'/%3E%3Cpath%20d%3D'M40%20300%20L210%20160%20L320%20240%20L430%20140%20L600%20300%20Z'%20fill%3D'%231e40af'/%3E%3Ccircle%20cx%3D'510'%20cy%3D'120'%20r%3D'32'%20fill%3D'%2393c5fd'/%3E%3Ctext%20x%3D'40'%20y%3D'70'%20fill%3D'%23e2e8f0'%20font-size%3D'22'%20font-family%3D'Arial'%3E%E8%AF%81%E6%8D%AE%E7%85%A7%E7%89%87%EF%BC%88%E6%BC%94%E7%A4%BA%EF%BC%89%3C/text%3E%3Ctext%20x%3D'40'%20y%3D'105'%20fill%3D'%2393c5fd'%20font-size%3D'14'%20font-family%3D'Arial'%3EGPS%20%2B%20Photo%20Preview%3C/text%3E%3C/svg%3E";
+
+function parseGpsAny(gps: any): { raw: string; lat: number | null; lng: number | null } {
+  if (gps === null || gps === undefined) return { raw: "", lat: null, lng: null };
+  // 字符串："lat,lng" 或 "lat lng"
+  if (typeof gps === "string") {
+    const raw = gps.trim();
+    const parts = raw.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+    const lat = parts[0] ? Number(parts[0]) : NaN;
+    const lng = parts[1] ? Number(parts[1]) : NaN;
+    return {
+      raw,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+    };
+  }
+  // 数组：[lat, lng]
+  if (Array.isArray(gps) && gps.length >= 2) {
+    const lat = Number(gps[0]);
+    const lng = Number(gps[1]);
+    const raw = `${gps[0]},${gps[1]}`;
+    return { raw, lat: Number.isFinite(lat) ? lat : null, lng: Number.isFinite(lng) ? lng : null };
+  }
+  // 对象：{lat,lng} 或 {latitude,longitude}
+  if (typeof gps === "object") {
+    const lat = Number((gps as any).lat ?? (gps as any).latitude);
+    const lng = Number((gps as any).lng ?? (gps as any).lon ?? (gps as any).longitude);
+    const raw = `${(gps as any).lat ?? (gps as any).latitude ?? ""},${(gps as any).lng ?? (gps as any).longitude ?? ""}`.trim();
+    return { raw, lat: Number.isFinite(lat) ? lat : null, lng: Number.isFinite(lng) ? lng : null };
+  }
+  return { raw: String(gps ?? ""), lat: null, lng: null };
+}
+
+function normalizeEvidence(raw: any): { gps: any; photo: any } {
+  if (raw && typeof raw === "object") return { gps: (raw as any).gps, photo: (raw as any).photo };
+  // 如果后端把 evidence 存成字符串 JSON
+  if (typeof raw === "string") {
+    try {
+      const obj = JSON.parse(raw);
+      return normalizeEvidence(obj);
+    } catch {
+      return { gps: null, photo: null };
+    }
+  }
+  return { gps: null, photo: null };
+}
+
+function isLikelyImageSrc(s: string) {
+  const v = (s || "").trim();
+  if (!v) return false;
+  if (v.startsWith("data:image/")) return true;
+  if (/^https?:\/\//i.test(v)) return true;
+  if (/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i.test(v)) return true;
+  return false;
+}
+
+function evidenceView(raw: any) {
+  const ev = normalizeEvidence(raw);
+  const gpsParsed = parseGpsAny(ev.gps);
+  const hasGps = gpsParsed.lat !== null && gpsParsed.lng !== null;
+  const lat = hasGps ? gpsParsed.lat!.toFixed(6) : "";
+  const lng = hasGps ? gpsParsed.lng!.toFixed(6) : "";
+  // 高德 marker（lng,lat）
+  const mapUrl = hasGps ? `https://uri.amap.com/marker?position=${lng},${lat}&name=%E4%BB%BB%E5%8A%A1%E5%AE%9A%E4%BD%8D` : "";
+  let photoSrc = "";
+  if (typeof ev.photo === "string") {
+    const s = ev.photo.trim();
+    if (s === "placeholder") photoSrc = EVIDENCE_DEMO_PHOTO;
+    else if (isLikelyImageSrc(s)) photoSrc = s;
+  }
+  return {
+    has_gps: hasGps,
+    lat,
+    lng,
+    gps_raw: gpsParsed.raw || (hasGps ? `${lat},${lng}` : ""),
+    map_url: mapUrl,
+    photo_src: photoSrc,
+  };
+}
+
+async function copyText(text: string) {
+  const t = (text || "").trim();
+  if (!t) return;
+  try {
+    await navigator.clipboard.writeText(t);
+  } catch {
+    // 兜底：无权限/不支持时忽略
+  }
+}
+
 function fieldLabel(key: string) {
   const k = String(key || "");
   const table: Record<string, string> = {
@@ -6597,6 +6723,49 @@ watch(
   font-size: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #e5ecff;
+}
+.evi-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.evi-photo {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.55);
+}
+.evi-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: cover;
+}
+.evi-photo.placeholder {
+  padding: 16px;
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 12px;
+  text-align: center;
+}
+.evi-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.evi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.evi-link {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+.kv-details.sub summary {
+  cursor: pointer;
 }
 @media (max-width: 980px) {
   .ont-toolbar {
