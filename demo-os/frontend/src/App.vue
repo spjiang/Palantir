@@ -39,8 +39,8 @@
           <div class="flow-meta">
             <span class="chip">当前进度：{{ flowProgress }}%</span>
             <span class="chip muted">事件ID：{{ incidentId || "未创建" }}</span>
-            <span class="chip muted">目标：{{ selectedTarget || "未选择" }}</span>
-            <span class="chip muted">区域：{{ areaId }}</span>
+            <span class="chip muted" :title="selectedTarget || ''">目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}</span>
+            <span class="chip muted">区域：{{ areaLabel(areaId) }}</span>
           </div>
           <div class="flow-steps">
             <button :class="{ active: flowStep === 'map' }" @click="goStep('map')">1 地图(20%)</button>
@@ -85,7 +85,7 @@
                     @click="pickTarget(it.target_id)"
                     :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
                   >
-                    <td>{{ it.target_id }}</td>
+                    <td :title="it.target_id">{{ targetLabel(it.target_id, it.area_id || areaId) }}</td>
                     <td>{{ it.risk_level }}</td>
                     <td>{{ it.risk_score.toFixed(2) }}</td>
                     <td>{{ it.confidence.toFixed(2) }}</td>
@@ -109,8 +109,10 @@
             <button @click="createIncident" :disabled="creatingIncident">新建事件</button>
           </div>
           <div class="chips">
-            <span class="chip muted">当前区域：{{ areaId }}</span>
-            <span class="chip" :class="{ muted: !selectedTarget }">当前目标：{{ selectedTarget || "未选择" }}</span>
+            <span class="chip muted">当前区域：{{ areaLabel(areaId) }}</span>
+            <span class="chip" :class="{ muted: !selectedTarget }" :title="selectedTarget || ''">
+              当前目标：{{ selectedTarget ? targetLabel(selectedTarget, areaId) : "未选择" }}
+            </span>
           </div>
           <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
           <div class="row">
@@ -126,8 +128,8 @@
                 <div class="plan-title">研判摘要</div>
                 <div class="plan-grid">
                   <div class="plan-item"><span>事件ID</span><strong>{{ agentResult.incident_id || incidentId || "-" }}</strong></div>
-                  <div class="plan-item"><span>目标</span><strong>{{ agentResult.target_id || selectedTarget || "-" }}</strong></div>
-                  <div class="plan-item"><span>区域</span><strong>{{ agentResult.area_id || areaId || "-" }}</strong></div>
+                  <div class="plan-item"><span>目标</span><strong :title="agentResult.target_id || selectedTarget || ''">{{ targetLabel(agentResult.target_id || selectedTarget, agentResult.area_id || areaId) }}</strong></div>
+                  <div class="plan-item"><span>区域</span><strong>{{ areaLabel(agentResult.area_id || areaId) }}</strong></div>
                   <div class="plan-item"><span>建议</span><strong>{{ agentResult.summary || agentResult.message || "-" }}</strong></div>
                 </div>
               </div>
@@ -154,8 +156,14 @@
                     >
                       <td class="muted">{{ idx + 1 }}</td>
                       <td>{{ t.task_type || t.type || "-" }}</td>
-                      <td>{{ t.target_object_id || t.target_id || agentResult.target_id || selectedTarget || "-" }}</td>
-                      <td>{{ t.owner_org || t.owner || "-" }}</td>
+                      <td :title="t.target_object_id || t.target_id || agentResult.target_id || selectedTarget || ''">
+                        {{ targetLabel(t.target_object_id || t.target_id || agentResult.target_id || selectedTarget, agentResult.area_id || areaId) }}
+                      </td>
+                      <td>
+                        <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org || t.owner).tone" :title="ownerOrgView(t.owner_org || t.owner).desc">
+                          {{ ownerOrgView(t.owner_org || t.owner).name }}
+                        </span>
+                      </td>
                       <td>{{ (t.sla_minutes ?? t.sla ?? "-") }}</td>
                       <td class="muted">{{ (t.required_evidence || t.evidence || []).join(" / ") }}</td>
                       <td class="muted">{{ t.detail || t.note || "-" }}</td>
@@ -197,8 +205,12 @@
               <tr v-for="t in tasks" :key="t.task_id">
                 <td class="muted">{{ t.task_id }}</td>
                 <td>{{ t.task_type }}</td>
-                <td>{{ t.target_object_id }}</td>
-                <td>{{ t.owner_org }}</td>
+                <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+                <td>
+                  <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
+                    {{ ownerOrgView(t.owner_org).name }}
+                  </span>
+                </td>
                 <td>{{ t.status }}</td>
               </tr>
             </tbody>
@@ -227,8 +239,12 @@
               <tr v-for="t in tasks" :key="t.task_id">
                 <td class="muted">{{ t.task_id }}</td>
                 <td>{{ t.task_type }}</td>
-                <td>{{ t.target_object_id }}</td>
-                <td>{{ t.owner_org }}</td>
+                <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+                <td>
+                  <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
+                    {{ ownerOrgView(t.owner_org).name }}
+                  </span>
+                </td>
                 <td>{{ t.status }}</td>
               </tr>
             </tbody>
@@ -308,7 +324,7 @@
           <div class="map-card">
             <div class="map-title">数字孪生 · 地图视图</div>
             <div ref="mapRef" class="map"></div>
-            <div class="map-hint muted">示例坐标基于重庆城区，按风险色彩/大小呈现 TopN 点位；点击点位或列表联动。</div>
+            <div class="map-hint muted">示例坐标基于北京海淀区东北旺西路8号院附近，按风险色彩/大小呈现 TopN 点位；点击点位或列表联动。</div>
           </div>
           <div class="list-card">
         <table class="tbl">
@@ -465,8 +481,12 @@
             <tr v-for="t in tasks" :key="t.task_id">
               <td class="muted">{{ t.task_id }}</td>
               <td>{{ t.task_type }}</td>
-              <td>{{ t.target_object_id }}</td>
-              <td>{{ t.owner_org }}</td>
+              <td :title="t.target_object_id">{{ targetLabel(t.target_object_id, areaId) }}</td>
+              <td>
+                <span class="org-badge" :class="'tone-' + ownerOrgView(t.owner_org).tone" :title="ownerOrgView(t.owner_org).desc">
+                  {{ ownerOrgView(t.owner_org).name }}
+                </span>
+              </td>
               <td>{{ t.status }}</td>
             </tr>
           </tbody>
@@ -3173,6 +3193,53 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
+// 展示层：把区域/对象 ID 映射成更贴近真实的中文名称（不影响后端数据与接口参数）
+const objectLabelCache = ref<Record<string, { name?: string; admin_area?: string }>>({});
+function areaLabel(area: string | undefined | null) {
+  const key = (area || "").trim();
+  const found = areaOptions.find((a) => a.value === key);
+  // label 里可能带括号说明，这里取括号前缀更像“真实名称”
+  const raw = found?.label || key || "-";
+  return raw.replace(/（.*?）/g, "");
+}
+
+function fallbackTargetCn(targetId: string) {
+  // 兼容两种格式：a-001-road-008 / road-008
+  const m = targetId.match(/(?:^|-)road-(\d{1,3})$/i) || targetId.match(/^road-(\d{1,3})$/i);
+  if (m?.[1]) return `路段${parseInt(m[1], 10)}`;
+  return targetId;
+}
+
+function targetLabel(targetId: string | undefined | null, area?: string | undefined | null) {
+  const id = (targetId || "").trim();
+  if (!id) return "-";
+  const cached = objectLabelCache.value[id];
+  const name = cached?.name || fallbackTargetCn(id);
+  const admin = cached?.admin_area || areaLabel(area || "");
+  // 优先展示“行政区/片区 + 对象名称”，更贴近真实；同时保留原 ID 在 title 里
+  return admin && admin !== "-" ? `${admin} · ${name}` : name;
+}
+
+async function warmObjectLabels(ids: string[], area?: string) {
+  const uniq = Array.from(new Set(ids.filter(Boolean)));
+  const need = uniq.filter((id) => !objectLabelCache.value[id]);
+  if (need.length === 0) return;
+  await Promise.all(
+    need.map(async (id) => {
+      try {
+        const { data } = await axios.get(`${apiBase}/objects/${id}`);
+        objectLabelCache.value[id] = {
+          name: data?.attrs?.name,
+          admin_area: data?.attrs?.admin_area || data?.area_id ? areaLabel(data?.area_id) : undefined,
+        };
+      } catch {
+        // 可能是旧 demo id（如 road-008），忽略即可走 fallback
+        objectLabelCache.value[id] = {};
+      }
+    })
+  );
+}
+
 const activePage = ref<"flow" | "main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
 
 const flowStep = ref<"map" | "agent" | "tasks" | "ack" | "report">("map");
@@ -3180,6 +3247,21 @@ const creatingIncident = ref(false);
 const agentResult = ref<any | null>(null);
 const agentResultError = ref<string>("");
 const agentConfirmed = ref(false);
+
+function ownerOrgView(org: string | undefined | null) {
+  const key = (org || "").trim();
+  const table: Record<string, { name: string; desc: string; tone: "blue" | "green" | "orange" | "red" | "gray" }> = {
+    "区排水": { name: "区排水抢险队", desc: "巡查积水、疏通排水口、泵站联动与排涝处置", tone: "blue" },
+    "交警": { name: "交警交通管制", desc: "封控/绕行引导、交通疏导与现场秩序维护", tone: "orange" },
+    // 兼容大模型可能输出的单位（先做展示映射，不影响后端）
+    "应急管理": { name: "应急管理指挥", desc: "统筹指挥、会商研判、跨部门协同与资源调度", tone: "red" },
+    "消防": { name: "消防救援", desc: "涉险救援、排险处置、人员转移与应急救护协同", tone: "red" },
+    "城管": { name: "城管市政", desc: "市政设施巡检、路面障碍清理与现场保障", tone: "green" },
+    "供电": { name: "电力抢修", desc: "涉水停电处置、线路巡检与应急供电保障", tone: "gray" },
+    "通信": { name: "通信保障", desc: "基站/链路保障、应急通信车与指挥通信保障", tone: "gray" },
+  };
+  return table[key] || { name: key || "-", desc: "未配置说明（可按需补充映射）", tone: "gray" };
+}
 const flowProgress = computed(() => {
   return flowStep.value === "map"
     ? 20
@@ -3366,46 +3448,62 @@ const riskSummary = computed(() => {
   return { total, counts, maxScore, maxId };
 });
 
-// 演示：为 road-001..008 生成重庆周边的示例坐标
+// 演示：为 road/a-001-road/a-002-road/a-003-road 生成北京海淀（东北旺西路8号院附近）的示例坐标
 const targetCoords: Record<string, [number, number]> = {
   // A-001（老数据兼容）
-  "road-001": [29.563, 106.551],
-  "road-002": [29.565, 106.56],
-  "road-003": [29.57, 106.54],
-  "road-004": [29.555, 106.57],
-  "road-005": [29.575, 106.565],
-  "road-006": [29.568, 106.548],
-  "road-007": [29.558, 106.535],
-  "road-008": [29.552, 106.558],
-  "road-009": [29.548, 106.545],
-  "road-010": [29.573, 106.552],
-  "road-011": [29.566, 106.533],
-  "road-012": [29.559, 106.568],
-  // 新区域前缀 A-002/A-003
-  "a-002-road-001": [29.58, 106.57],
-  "a-002-road-002": [29.582, 106.565],
-  "a-002-road-003": [29.584, 106.555],
-  "a-002-road-004": [29.578, 106.548],
-  "a-002-road-005": [29.586, 106.54],
-  "a-002-road-006": [29.59, 106.53],
-  "a-002-road-007": [29.593, 106.545],
-  "a-002-road-008": [29.587, 106.555],
-  "a-002-road-009": [29.581, 106.535],
-  "a-002-road-010": [29.585, 106.52],
-  "a-002-road-011": [29.592, 106.525],
-  "a-002-road-012": [29.589, 106.515],
-  "a-003-road-001": [29.54, 106.53],
-  "a-003-road-002": [29.542, 106.54],
-  "a-003-road-003": [29.544, 106.55],
-  "a-003-road-004": [29.536, 106.52],
-  "a-003-road-005": [29.538, 106.51],
-  "a-003-road-006": [29.545, 106.505],
-  "a-003-road-007": [29.548, 106.515],
-  "a-003-road-008": [29.552, 106.52],
-  "a-003-road-009": [29.546, 106.495],
-  "a-003-road-010": [29.549, 106.488],
-  "a-003-road-011": [29.541, 106.49],
-  "a-003-road-012": [29.535, 106.5],
+  "road-001": [39.9991, 116.3269],
+  "road-002": [40.001, 116.3288],
+  "road-003": [39.9978, 116.3292],
+  "road-004": [39.9985, 116.3247],
+  "road-005": [40.0002, 116.3239],
+  "road-006": [39.9969, 116.3261],
+  "road-007": [39.9998, 116.3229],
+  "road-008": [40.0009, 116.3254],
+  "road-009": [39.9976, 116.3259],
+  "road-010": [39.9989, 116.3301],
+  "road-011": [40.0016, 116.3262],
+  "road-012": [39.9965, 116.3238],
+
+  // A-001（后端种子数据的真实 object_id 格式：a-001-road-xxx）
+  "a-001-road-001": [39.9991, 116.3269],
+  "a-001-road-002": [40.001, 116.3288],
+  "a-001-road-003": [39.9978, 116.3292],
+  "a-001-road-004": [39.9985, 116.3247],
+  "a-001-road-005": [40.0002, 116.3239],
+  "a-001-road-006": [39.9969, 116.3261],
+  "a-001-road-007": [39.9998, 116.3229],
+  "a-001-road-008": [40.0009, 116.3254],
+  "a-001-road-009": [39.9976, 116.3259],
+  "a-001-road-010": [39.9989, 116.3301],
+  "a-001-road-011": [40.0016, 116.3262],
+  "a-001-road-012": [39.9965, 116.3238],
+
+  // 新区域前缀 A-002/A-003（同样放在北京附近，做轻微偏移区分）
+  "a-002-road-001": [40.0105, 116.3365],
+  "a-002-road-002": [40.0122, 116.338],
+  "a-002-road-003": [40.0097, 116.3392],
+  "a-002-road-004": [40.011, 116.3348],
+  "a-002-road-005": [40.013, 116.3355],
+  "a-002-road-006": [40.0089, 116.3368],
+  "a-002-road-007": [40.0109, 116.3334],
+  "a-002-road-008": [40.012, 116.3361],
+  "a-002-road-009": [40.0092, 116.3358],
+  "a-002-road-010": [40.0113, 116.3401],
+  "a-002-road-011": [40.0135, 116.3369],
+  "a-002-road-012": [40.0087, 116.3342],
+
+  "a-003-road-001": [39.9905, 116.3165],
+  "a-003-road-002": [39.9921, 116.3182],
+  "a-003-road-003": [39.9896, 116.3191],
+  "a-003-road-004": [39.9913, 116.3148],
+  "a-003-road-005": [39.9932, 116.3159],
+  "a-003-road-006": [39.9889, 116.3169],
+  "a-003-road-007": [39.9909, 116.3132],
+  "a-003-road-008": [39.992, 116.3161],
+  "a-003-road-009": [39.9892, 116.3152],
+  "a-003-road-010": [39.991, 116.3201],
+  "a-003-road-011": [39.9936, 116.3168],
+  "a-003-road-012": [39.9885, 116.3142],
 };
 
 const mapRef = ref<HTMLDivElement | null>(null);
@@ -3418,6 +3516,11 @@ async function loadTopN() {
   if (!selectedTarget.value && topN.value.length > 0) {
     selectedTarget.value = topN.value[0].target_id || "";
   }
+  // 预热对象中文名缓存（更贴近真实展示）
+  warmObjectLabels(
+    (topN.value || []).map((it: any) => String(it.target_id || "")),
+    areaId.value
+  ).catch(() => {});
   renderMap();
 }
 
@@ -3692,7 +3795,7 @@ function renderMap() {
       zoomControl: true,
       scrollWheelZoom: true,
       attributionControl: false,
-    }).setView([29.563, 106.551], 12);
+    }).setView([39.9991, 116.3269], 15);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
     }).addTo(map);
@@ -3703,14 +3806,14 @@ function renderMap() {
   markers = {};
 
   const areaCenters: Record<string, [number, number]> = {
-    "A-001": [29.563, 106.551],
-    "A-002": [29.585, 106.54],
-    "A-003": [29.54, 106.52],
+    "A-001": [39.9991, 116.3269],
+    "A-002": [40.0105, 116.3365],
+    "A-003": [39.9905, 116.3165],
   };
 
   const getCoord = (id: string, area: string | undefined) => {
     if (targetCoords[id]) return targetCoords[id];
-    const center = areaCenters[area || "A-001"] || [29.563, 106.551];
+    const center = areaCenters[area || "A-001"] || [39.9991, 116.3269];
     const hash = id.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
     const lat = center[0] + ((hash % 10) - 5) * 0.002;
     const lng = center[1] + (((hash / 10) % 10) - 5) * 0.002;
@@ -3736,7 +3839,7 @@ function renderMap() {
     })
       .addTo(map!)
       .bindPopup(
-        `<strong>${item.target_id}</strong><br/>风险: ${item.risk_level}<br/>分数: ${item.risk_score.toFixed(
+        `<strong>${targetLabel(item.target_id, item.area_id || areaId.value)}</strong><br/><span style="color:#9fb2d4">${item.target_id}</span><br/>风险: ${item.risk_level}<br/>分数: ${item.risk_score.toFixed(
           2,
         )}<br/>置信度: ${item.confidence.toFixed(2)}<br/>解释: ${(item.explain_factors || []).slice(0, 3).join(" / ")}`
       )
@@ -3906,6 +4009,41 @@ watch(
 .plan-card summary.plan-title {
   cursor: pointer;
   user-select: none;
+}
+
+.org-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 240px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e5ecff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.org-badge.tone-blue {
+  background: rgba(79, 139, 255, 0.18);
+  border-color: rgba(79, 139, 255, 0.35);
+}
+.org-badge.tone-green {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.org-badge.tone-orange {
+  background: rgba(249, 115, 22, 0.18);
+  border-color: rgba(249, 115, 22, 0.35);
+}
+.org-badge.tone-red {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+.org-badge.tone-gray {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.28);
 }
 .grid {
   margin-top: 14px;
