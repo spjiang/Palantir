@@ -3186,9 +3186,9 @@ const layerBlocks = [
 
 const areaId = ref("A-001");
 const areaOptions = [
-  { label: "A-001（演示默认）", value: "A-001" },
-  { label: "A-002（演示）", value: "A-002" },
-  { label: "A-003（演示）", value: "A-003" },
+  { label: "海淀区·东北旺（A-001）", value: "A-001" },
+  { label: "海淀区·西北旺（A-002）", value: "A-002" },
+  { label: "海淀区·上地（A-003）", value: "A-003" },
 ];
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
@@ -3197,10 +3197,26 @@ const selectedTarget = ref<string>("");
 const objectLabelCache = ref<Record<string, { name?: string; admin_area?: string }>>({});
 function areaLabel(area: string | undefined | null) {
   const key = (area || "").trim();
+  const table: Record<string, string> = {
+    "A-001": "海淀区·东北旺",
+    "A-002": "海淀区·西北旺",
+    "A-003": "海淀区·上地",
+  };
+  if (table[key]) return table[key];
   const found = areaOptions.find((a) => a.value === key);
   // label 里可能带括号说明，这里取括号前缀更像“真实名称”
   const raw = found?.label || key || "-";
   return raw.replace(/（.*?）/g, "");
+}
+
+function toSeedObjectId(targetId: string, area: string | undefined | null) {
+  // 把旧 demo 的 road-008 转为后端种子数据格式：a-001-road-008
+  const id = (targetId || "").trim();
+  const a = (area || "").trim();
+  const m = id.match(/^road-(\d{1,3})$/i);
+  if (!m || !a) return null;
+  const n = String(parseInt(m[1], 10)).padStart(3, "0");
+  return `${a.toLowerCase()}-road-${n}`;
 }
 
 function fallbackTargetCn(targetId: string) {
@@ -3213,7 +3229,8 @@ function fallbackTargetCn(targetId: string) {
 function targetLabel(targetId: string | undefined | null, area?: string | undefined | null) {
   const id = (targetId || "").trim();
   if (!id) return "-";
-  const cached = objectLabelCache.value[id];
+  const seedId = toSeedObjectId(id, area || null);
+  const cached = objectLabelCache.value[id] || (seedId ? objectLabelCache.value[seedId] : undefined);
   const name = cached?.name || fallbackTargetCn(id);
   const admin = cached?.admin_area || areaLabel(area || "");
   // 优先展示“行政区/片区 + 对象名称”，更贴近真实；同时保留原 ID 在 title 里
@@ -3222,7 +3239,11 @@ function targetLabel(targetId: string | undefined | null, area?: string | undefi
 
 async function warmObjectLabels(ids: string[], area?: string) {
   const uniq = Array.from(new Set(ids.filter(Boolean)));
-  const need = uniq.filter((id) => !objectLabelCache.value[id]);
+  const expanded = uniq.flatMap((id) => {
+    const seedId = toSeedObjectId(id, area || null);
+    return seedId ? [id, seedId] : [id];
+  });
+  const need = Array.from(new Set(expanded)).filter((id) => !objectLabelCache.value[id]);
   if (need.length === 0) return;
   await Promise.all(
     need.map(async (id) => {
@@ -3230,8 +3251,18 @@ async function warmObjectLabels(ids: string[], area?: string) {
         const { data } = await axios.get(`${apiBase}/objects/${id}`);
         objectLabelCache.value[id] = {
           name: data?.attrs?.name,
-          admin_area: data?.attrs?.admin_area || data?.area_id ? areaLabel(data?.area_id) : undefined,
+          admin_area: data?.attrs?.admin_area || (data?.area_id ? areaLabel(data?.area_id) : undefined),
         };
+        // 如果是 seedId，也把同一份中文名回写给 road-xxx（便于老数据展示）
+        if (area) {
+          const reverse = id.match(/^(a-\d{3})-road-(\d{3})$/i);
+          if (reverse) {
+            const legacy = `road-${parseInt(reverse[2], 10)}`;
+            if (!objectLabelCache.value[legacy]) {
+              objectLabelCache.value[legacy] = objectLabelCache.value[id];
+            }
+          }
+        }
       } catch {
         // 可能是旧 demo id（如 road-008），忽略即可走 fallback
         objectLabelCache.value[id] = {};
@@ -3764,7 +3795,7 @@ async function ackAllDone() {
       actor: "demo-mobile",
       status: "done",
       note: "演示回执：已完成",
-      evidence: { gps: "31.23,121.47", photo: "placeholder" },
+      evidence: { gps: "39.9991,116.3269", photo: "placeholder" },
     });
   }
   await loadTasks();

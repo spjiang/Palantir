@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -288,15 +289,74 @@ def seed_demo_data():
     now = datetime.now(timezone.utc)
     with db.session() as s:
         areas = [
-            ("A-001", "示范区"),
-            ("A-002", "江北新区"),
-            ("A-003", "高新区"),
+            ("A-001", "北京市海淀区·东北旺（东北旺西路8号院）"),
+            ("A-002", "北京市海淀区·西北旺"),
+            ("A-003", "北京市海淀区·上地"),
         ]
 
         for area_id, admin_area in areas:
-            # 若该区域已有对象则跳过
-            if s.query(ObjectState).filter(ObjectState.area_id == area_id).count() > 0:
+            road_names = [
+                "东北旺西路",
+                "东北旺中路",
+                "后厂村路",
+                "软件园二号路",
+                "信息路",
+                "上地西路",
+                "西北旺东路",
+                "永丰路",
+            ]
+
+            def _name_for_idx(idx: int) -> str:
+                rn = road_names[(idx - 1) % len(road_names)]
+                return f"{rn}（第{idx}段）"
+
+            # 若该区域已有对象：更新为北京相关中文名称（不强制重置风险特征，避免影响演示逻辑）
+            existing = (
+                s.query(ObjectState)
+                .filter(ObjectState.area_id == area_id, ObjectState.object_type == "road_segment")
+                .order_by(ObjectState.object_id.asc())
+                .all()
+            )
+            if existing:
+                for obj in existing:
+                    # 从 object_id 里推断序号：a-001-road-008 -> 8
+                    idx = None
+                    try:
+                        m = re.search(r"road-(\d{3})$", obj.object_id)
+                        if m:
+                            idx = int(m.group(1))
+                    except Exception:
+                        idx = None
+
+                    attrs = obj.attrs or {}
+                    if idx:
+                        attrs["name"] = _name_for_idx(idx)
+                    attrs["admin_area"] = admin_area
+                    obj.attrs = attrs
+
+                # 同步更新该区域最新 open 事件标题/预警原因，让展示更贴近北京
+                inc = (
+                    s.query(Incident)
+                    .filter(Incident.area_id == area_id)
+                    .order_by(Incident.created_at.desc())
+                    .first()
+                )
+                if inc:
+                    inc.title = f"{admin_area} 暴雨内涝处置事件（演示）"
+
+                # 更新最近一条预警原因
+                alert = (
+                    s.query(AlertEvent)
+                    .filter(AlertEvent.area_id == area_id)
+                    .order_by(AlertEvent.created_at.desc())
+                    .first()
+                )
+                if alert:
+                    alert.reason = "东北旺西路8号院周边雨强上升 + 低洼点位风险提升"
+
+                s.commit()
                 continue
+
             # 12 个路段对象，前 3 条调高风险（红/橙）；对象 ID 加入区域前缀避免主键冲突
             for i in range(1, 13):
                 oid = f"{area_id.lower()}-road-{i:03d}"
@@ -319,7 +379,7 @@ def seed_demo_data():
                         object_type="road_segment",
                         area_id=area_id,
                         attrs={
-                            "name": f"路段{i}",
+                            "name": _name_for_idx(i),
                             "admin_area": admin_area,
                             "elevation_m": features["elevation_m"],
                             "drainage_capacity": features["drainage_capacity"],
@@ -347,7 +407,7 @@ def seed_demo_data():
                     incident_id=inc.id,
                     area_id=area_id,
                     level="红" if area_id == "A-002" else "橙",
-                    reason="雨强上升+低洼路段风险提升",
+                    reason="东北旺西路8号院周边雨强上升 + 低洼点位风险提升",
                     created_at=now - timedelta(minutes=5),
                 )
             )
@@ -356,7 +416,7 @@ def seed_demo_data():
                     id=f"tl-{uuid4().hex}",
                     incident_id=inc.id,
                     type="alert_event",
-                    payload={"level": "红" if area_id == "A-002" else "橙", "reason": "雨强上升"},
+                    payload={"level": "红" if area_id == "A-002" else "橙", "reason": "东北旺西路8号院周边雨强上升"},
                 )
             )
 
