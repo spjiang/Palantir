@@ -4403,6 +4403,9 @@ onBeforeUnmount(() => {
     ontologyCy.destroy();
     ontologyCy = null;
   }
+  // 关闭图片预览，避免残留
+  imagePreview.open = false;
+  imagePreview.src = "";
 });
 
 const ontologyIssues = computed(() => {
@@ -5234,6 +5237,24 @@ const EVIDENCE_DEMO_PHOTO =
 // 证据图片：用 Vite 资源导入，避免 public/中文路径与 Dockerfile 未 COPY public 导致的 404
 const EVIDENCE_PHOTO_POLICE = evidencePoliceUrl;
 const EVIDENCE_PHOTO_DRAINAGE = evidenceDrainageUrl;
+
+// 全局图片预览弹框（用于证据照片等）
+const imagePreview = reactive<{ open: boolean; src: string }>({ open: false, src: "" });
+function openImagePreview(src: string) {
+  const s = (src || "").trim();
+  if (!s) return;
+  imagePreview.src = s;
+  imagePreview.open = true;
+}
+function closeImagePreview() {
+  imagePreview.open = false;
+  imagePreview.src = "";
+}
+function onPreviewImgError(evt: Event) {
+  const img = evt.target as HTMLImageElement | null;
+  if (!img) return;
+  img.src = EVIDENCE_DEMO_PHOTO;
+}
 
 function parseGpsAny(gps: any): { raw: string; lat: number | null; lng: number | null } {
   if (gps === null || gps === undefined) return { raw: "", lat: null, lng: null };
@@ -6881,6 +6902,7 @@ watch(
   height: auto;
   max-height: 220px;
   object-fit: cover;
+  cursor: zoom-in;
 }
 .evi-photo.placeholder {
   padding: 16px;
@@ -6916,6 +6938,46 @@ watch(
 }
 .kv-details.sub summary {
   cursor: pointer;
+}
+
+/* 全局图片预览弹框 */
+.img-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.72);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.img-modal-card {
+  width: min(1100px, 96vw);
+  max-height: 90vh;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+}
+.img-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.img-modal-body {
+  padding: 12px;
+  overflow: auto;
+  max-height: calc(90vh - 52px);
+}
+.img-modal-body img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.35);
 }
 
 @media (min-width: 980px) {
