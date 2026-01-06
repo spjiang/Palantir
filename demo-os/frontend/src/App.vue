@@ -7,6 +7,7 @@
         <span>智能体: {{ agentBase }}</span>
       </div>
       <div class="meta tabs">
+        <button :class="{ active: activePage === 'flow' }" @click="activePage = 'flow'; goStep('map')">闭环分步（五页）</button>
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
         <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'"> L1 数据接入与治理</button>
         <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'"> L2 本体/语义选型</button>
@@ -18,7 +19,215 @@
       </div>
     </header>
 
-<main class="grid" v-if="activePage === 'main'">
+<main class="grid single" v-if="activePage === 'flow'">
+      <section class="card wide">
+        <div class="flow-hdr">
+          <div>
+            <h3>分步闭环（五页）</h3>
+            <div class="muted small">1) 地图 TopN → 2) 暴雨参谋长对话 → 3) 任务 → 4) 回执 → 5) 战报</div>
+          </div>
+          <div class="flow-actions">
+            <button class="ghost" @click="resetFlow">重置流程</button>
+            <button class="ghost" @click="activePage = 'main'">回到原主演示</button>
+          </div>
+        </div>
+
+        <div class="flow-progress">
+          <div class="flow-bar">
+            <div class="flow-bar-fill" :style="{ width: flowProgress + '%' }"></div>
+          </div>
+          <div class="flow-meta">
+            <span class="chip">当前进度：{{ flowProgress }}%</span>
+            <span class="chip muted">事件ID：{{ incidentId || "未创建" }}</span>
+            <span class="chip muted">目标：{{ selectedTarget || "未选择" }}</span>
+            <span class="chip muted">区域：{{ areaId }}</span>
+          </div>
+          <div class="flow-steps">
+            <button :class="{ active: flowStep === 'map' }" @click="goStep('map')">1 地图(10%)</button>
+            <button :class="{ active: flowStep === 'agent' }" @click="goStep('agent')" :disabled="!selectedTarget">2 对话(20%)</button>
+            <button :class="{ active: flowStep === 'tasks' }" @click="goStep('tasks')" :disabled="!incidentId">3 任务(30%)</button>
+            <button :class="{ active: flowStep === 'ack' }" @click="goStep('ack')" :disabled="!incidentId">4 回执(40%)</button>
+            <button :class="{ active: flowStep === 'report' }" @click="goStep('report')" :disabled="!incidentId">5 战报(50%)</button>
+          </div>
+        </div>
+
+        <!-- 1) 风险热力图（简化为 TopN 列表）+ 数字孪生 · 地图视图 -->
+        <div v-if="flowStep === 'map'" class="flow-page">
+          <h3>1) 风险热力图（简化为 TopN 列表）</h3>
+          <div class="row">
+            <label>区域</label>
+            <select v-model="areaId">
+              <option v-for="a in areaOptions" :key="a.value" :value="a.value">{{ a.label }}</option>
+            </select>
+            <button @click="loadTopN">刷新 TopN</button>
+          </div>
+          <div class="map-and-list">
+            <div class="map-card">
+              <div class="map-title">数字孪生 · 地图视图</div>
+              <div ref="mapRef" class="map"></div>
+              <div class="map-hint muted">点击预警点位（如 road-008）将自动跳转到「暴雨参谋长智能体（对话）」页面。</div>
+            </div>
+            <div class="list-card">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>对象</th>
+                    <th>等级</th>
+                    <th>分数</th>
+                    <th>置信度</th>
+                    <th>解释因子</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="it in topN"
+                    :key="it.target_id"
+                    @click="pickTarget(it.target_id)"
+                    :class="['level-' + (it.risk_level || ''), { active: it.target_id === selectedTarget }]"
+                  >
+                    <td>{{ it.target_id }}</td>
+                    <td>{{ it.risk_level }}</td>
+                    <td>{{ it.risk_score.toFixed(2) }}</td>
+                    <td>{{ it.confidence.toFixed(2) }}</td>
+                    <td class="muted">{{ (it.explain_factors || []).slice(0, 3).join(" / ") }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="row">
+            <button class="ghost" :disabled="!selectedTarget" @click="goStep('agent')">下一步：进入对话</button>
+          </div>
+        </div>
+
+        <!-- 2) 暴雨参谋长智能体（对话） -->
+        <div v-else-if="flowStep === 'agent'" class="flow-page">
+          <h3>2) 暴雨参谋长智能体（对话）</h3>
+          <div class="row">
+            <label>事件ID</label>
+            <input v-model="incidentId" placeholder="留空可由智能体自动创建" />
+            <button @click="createIncident">新建事件</button>
+          </div>
+          <div class="chips">
+            <span class="chip muted">当前区域：{{ areaId }}</span>
+            <span class="chip" :class="{ muted: !selectedTarget }">当前目标：{{ selectedTarget || "未选择" }}</span>
+          </div>
+          <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
+          <div class="row">
+            <button @click="sendChat" :disabled="!selectedTarget">发送</button>
+            <button class="ghost" @click="fillOneClick" :disabled="!selectedTarget">一键派单口令</button>
+            <button class="ghost" @click="goStep('tasks')" :disabled="!incidentId">下一步：进入任务</button>
+          </div>
+          <div class="box">
+            <div class="muted">智能体输出：</div>
+            <pre class="pre">{{ agentOut }}</pre>
+          </div>
+        </div>
+
+        <!-- 3) 任务 -->
+        <div v-else-if="flowStep === 'tasks'" class="flow-page">
+          <h3>3) 任务</h3>
+          <div class="row">
+            <label>事件ID</label>
+            <input v-model="incidentId" placeholder="必填" />
+            <button @click="loadTasks" :disabled="!incidentId">加载任务</button>
+            <button class="ghost" @click="goStep('ack')" :disabled="tasks.length === 0">下一步：进入回执</button>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>任务ID</th>
+                <th>类型</th>
+                <th>目标</th>
+                <th>责任单位</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in tasks" :key="t.task_id">
+                <td class="muted">{{ t.task_id }}</td>
+                <td>{{ t.task_type }}</td>
+                <td>{{ t.target_object_id }}</td>
+                <td>{{ t.owner_org }}</td>
+                <td>{{ t.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 4) 回执 -->
+        <div v-else-if="flowStep === 'ack'" class="flow-page">
+          <h3>4) 回执</h3>
+          <div class="row">
+            <button class="ghost" @click="loadTasks" :disabled="!incidentId">刷新任务</button>
+            <button @click="ackAllDone" :disabled="tasks.length === 0">一键回执完成</button>
+            <button class="ghost" @click="goStep('report')" :disabled="!incidentId">下一步：进入战报</button>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>任务ID</th>
+                <th>类型</th>
+                <th>目标</th>
+                <th>责任单位</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in tasks" :key="t.task_id">
+                <td class="muted">{{ t.task_id }}</td>
+                <td>{{ t.task_type }}</td>
+                <td>{{ t.target_object_id }}</td>
+                <td>{{ t.owner_org }}</td>
+                <td>{{ t.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 5) 战报 -->
+        <div v-else-if="flowStep === 'report'" class="flow-page">
+          <h3>5) 战报</h3>
+          <div class="row">
+            <button @click="loadReport" :disabled="!incidentId">生成战报</button>
+            <button class="ghost" @click="goStep('map')">回到第一步</button>
+          </div>
+          <div v-if="reportData" class="report-grid">
+            <div class="report-card">
+              <div class="rc-title">事件</div>
+              <div class="rc-main">{{ reportData.title || reportData.incident_id }}</div>
+              <div class="rc-sub">状态：{{ reportData.status }}</div>
+            </div>
+            <div class="report-card">
+              <div class="rc-title">任务指标</div>
+              <div class="rc-metrics">
+                <div><span>总数</span><strong>{{ reportData.metrics?.task_total ?? "-" }}</strong></div>
+                <div><span>完成</span><strong>{{ reportData.metrics?.task_done ?? "-" }}</strong></div>
+                <div><span>完成率</span><strong>{{ (reportData.metrics?.task_done_rate ?? 0) | percent }}</strong></div>
+              </div>
+            </div>
+            <div class="report-card timeline">
+              <div class="rc-title">时间线</div>
+              <ul class="timeline-list">
+                <li v-for="(e, idx) in reportData.timeline" :key="idx">
+                  <div class="tl-time">{{ formatTime(e.time) }}</div>
+                  <div class="tl-body">
+                    <div class="tl-type">{{ e.type }}</div>
+                    <div class="tl-payload muted">{{ stringify(e.payload) }}</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="box">
+            <div class="muted">原始 JSON：</div>
+            <pre class="pre">{{ reportOut }}</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+<main class="grid" v-else-if="activePage === 'main'">
       <section class="card wide">
         <h3>1) 风险热力图（简化为 TopN 列表）</h3>
         <div class="field-help">
@@ -2914,7 +3123,40 @@ const areaOptions = [
 const incidentId = ref<string>("");
 const selectedTarget = ref<string>("");
 
-const activePage = ref<"main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
+const activePage = ref<"flow" | "main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
+
+const flowStep = ref<"map" | "agent" | "tasks" | "ack" | "report">("map");
+const flowProgress = computed(() => {
+  return flowStep.value === "map"
+    ? 10
+    : flowStep.value === "agent"
+      ? 20
+      : flowStep.value === "tasks"
+        ? 30
+        : flowStep.value === "ack"
+          ? 40
+          : 50;
+});
+
+function goStep(step: "map" | "agent" | "tasks" | "ack" | "report") {
+  flowStep.value = step;
+  // 进入地图页时确保地图刷新（避免切换后地图未渲染）
+  if (step === "map") {
+    setTimeout(() => renderMap(), 0);
+  }
+}
+
+function resetFlow() {
+  flowStep.value = "map";
+  incidentId.value = "";
+  selectedTarget.value = "";
+  chatInput.value = "请研判并一键下发任务包";
+  agentOut.value = "";
+  tasks.value = [];
+  reportOut.value = "";
+  reportData.value = null;
+  setTimeout(() => renderMap(), 0);
+}
 
 // 本体管理演示（前端本地状态，不影响现有页面）
 const ontologyEntityId = ref("road-segment");
@@ -3112,6 +3354,10 @@ async function loadTopN() {
 function pickTarget(targetId: string) {
   selectedTarget.value = targetId;
   chatInput.value = `请研判 ${targetId} 并给出任务包建议`;
+  // 分步闭环：点击预警（如 road-008）即跳转到对话页
+  if (activePage.value === "flow") {
+    flowStep.value = "agent";
+  }
 }
 
 async function createIncident() {
@@ -3135,6 +3381,11 @@ async function sendChat() {
   if (!incidentId.value) {
     // 从 tasks 里推断不到，这里就用后端的“最新事件”能力简化：直接再新建一个事件让用户可控
     // 演示：如果智能体触发派单，用户通常会先点“新建事件”；这里保持简单不反推。
+  }
+  // 分步闭环：对话完成后进入任务页，并尝试自动拉取任务
+  if (activePage.value === "flow" && incidentId.value) {
+    flowStep.value = "tasks";
+    loadTasks().catch(() => {});
   }
 }
 
@@ -3331,6 +3582,10 @@ async function ackAllDone() {
     });
   }
   await loadTasks();
+  // 分步闭环：回执完成后进入战报页
+  if (activePage.value === "flow") {
+    flowStep.value = "report";
+  }
 }
 
 async function loadReport() {
@@ -3343,6 +3598,12 @@ loadTopN().catch(() => {});
 
 function renderMap() {
   if (!mapRef.value) return;
+  // 可能在“主演示页”与“闭环分步页”之间切换，map 容器会变化；此时需销毁旧 map 再重建
+  if (map && mapRef.value && map.getContainer && map.getContainer() !== mapRef.value) {
+    map.remove();
+    map = null;
+    markers = {};
+  }
   if (!map) {
     map = L.map(mapRef.value, {
       zoomControl: true,
@@ -3460,6 +3721,64 @@ watch(
 .tabs button.active {
   background: linear-gradient(135deg, #4f8bff, #3dd6d0);
   color: #0c1220;
+}
+
+.flow-hdr {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.flow-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.flow-progress {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 14px;
+}
+.flow-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.flow-bar-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
+  width: 0%;
+  transition: width 220ms ease;
+}
+.flow-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.flow-steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.flow-steps button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  color: #d8e5ff;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+.flow-steps button.active {
+  background: linear-gradient(135deg, #4f8bff, #3dd6d0);
+  color: #0c1220;
+}
+.flow-page {
+  margin-top: 10px;
 }
 .grid {
   margin-top: 14px;
