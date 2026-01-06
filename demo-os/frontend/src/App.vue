@@ -328,7 +328,7 @@
                           <summary>查看证据</summary>
                           <div class="evi-grid">
                             <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
-                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" />
+                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" @error="onEvidenceImgError" />
                             </div>
                             <div class="evi-photo placeholder" v-else>无照片</div>
                             <div class="evi-map" v-if="evidenceView(kv.raw).has_gps" :id="evidenceMapDomId('flow', idx)"></div>
@@ -609,7 +609,7 @@
                           <summary>查看证据</summary>
                           <div class="evi-grid">
                             <div class="evi-photo" v-if="evidenceView(kv.raw).photo_src">
-                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" />
+                              <img :src="evidenceView(kv.raw).photo_src" alt="证据照片" loading="lazy" @error="onEvidenceImgError" />
                             </div>
                             <div class="evi-photo placeholder" v-else>无照片</div>
                             <div class="evi-map" v-if="evidenceView(kv.raw).has_gps" :id="evidenceMapDomId('main', idx)"></div>
@@ -3516,6 +3516,8 @@ import { ref, computed, onMounted, watch, reactive, nextTick, onBeforeUnmount } 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import cytoscape from "cytoscape";
+import evidencePoliceUrl from "./assets/evidence-police.jpg";
+import evidenceDrainageUrl from "./assets/evidence-drainage.jpg";
 
 // 默认走同源代理（见 vite.config.ts 的 server.proxy），避免必须暴露 7000/7001 端口给外部网络
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -5205,8 +5207,9 @@ function prettyJson(v: any) {
 // 证据展示：尽量把 photo/gps 从 JSON 中“可视化”
 const EVIDENCE_DEMO_PHOTO =
   "data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A//www.w3.org/2000/svg'%20width%3D'640'%20height%3D'360'%3E%3Crect%20width%3D'640'%20height%3D'360'%20fill%3D'%230f172a'/%3E%3Cpath%20d%3D'M40%20300%20L210%20160%20L320%20240%20L430%20140%20L600%20300%20Z'%20fill%3D'%231e40af'/%3E%3Ccircle%20cx%3D'510'%20cy%3D'120'%20r%3D'32'%20fill%3D'%2393c5fd'/%3E%3Ctext%20x%3D'40'%20y%3D'70'%20fill%3D'%23e2e8f0'%20font-size%3D'22'%20font-family%3D'Arial'%3E%E8%AF%81%E6%8D%AE%E7%85%A7%E7%89%87%EF%BC%88%E6%BC%94%E7%A4%BA%EF%BC%89%3C/text%3E%3Ctext%20x%3D'40'%20y%3D'105'%20fill%3D'%2393c5fd'%20font-size%3D'14'%20font-family%3D'Arial'%3EGPS%20%2B%20Photo%20Preview%3C/text%3E%3C/svg%3E";
-const EVIDENCE_PHOTO_POLICE = "/交警执勤001.jpg";
-const EVIDENCE_PHOTO_DRAINAGE = "/排水002.jpg";
+// 证据图片：用 Vite 资源导入，避免 public/中文路径与 Dockerfile 未 COPY public 导致的 404
+const EVIDENCE_PHOTO_POLICE = evidencePoliceUrl;
+const EVIDENCE_PHOTO_DRAINAGE = evidenceDrainageUrl;
 
 function parseGpsAny(gps: any): { raw: string; lat: number | null; lng: number | null } {
   if (gps === null || gps === undefined) return { raw: "", lat: null, lng: null };
@@ -5288,6 +5291,15 @@ function extractPhotoSrc(photo: any): string {
     return extractPhotoSrc(s);
   }
   return "";
+}
+
+function onEvidenceImgError(evt: Event) {
+  const img = evt.target as HTMLImageElement | null;
+  if (!img) return;
+  // 避免死循环
+  if (img.dataset && img.dataset.fallbackApplied === "1") return;
+  if (img.dataset) img.dataset.fallbackApplied = "1";
+  img.src = EVIDENCE_DEMO_PHOTO;
 }
 
 function evidenceView(raw: any) {

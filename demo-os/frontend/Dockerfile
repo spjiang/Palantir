@@ -8,6 +8,7 @@ COPY package.json /app/package.json
 RUN npm install
 
 COPY index.html vite.config.ts /app/
+COPY public /app/public
 COPY src /app/src
 
 EXPOSE 8080
