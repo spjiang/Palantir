@@ -149,8 +149,7 @@
 
           <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
           <div class="row">
-            <button @click="sendChat" :disabled="!selectedTarget">发送</button>
-            <button class="ghost" @click="fillOneClick" :disabled="!selectedTarget">一键派单口令</button>
+            <button @click="sendChatOneClick" :disabled="!selectedTarget">发送（一键派单）</button>
             <button class="ghost" @click="confirmAgentAndNext" :disabled="!agentResult">专家确认无误 → 进入任务</button>
           </div>
           <div class="box">
@@ -303,7 +302,7 @@
             <div class="rc-metrics">
               <div><span>总数</span><strong>{{ reportData.metrics?.task_total ?? "-" }}</strong></div>
               <div><span>完成</span><strong>{{ reportData.metrics?.task_done ?? "-" }}</strong></div>
-              <div><span>完成率</span><strong>{{ (reportData.metrics?.task_done_rate ?? 0) | percent }}</strong></div>
+              <div><span>完成率</span><strong>{{ formatPercent(reportData.metrics?.task_done_rate) }}</strong></div>
             </div>
           </div>
           <div class="report-card timeline">
@@ -316,14 +315,20 @@
                 </div>
                 <div class="tl-right">
                   <div class="tl-head">
-                    <div class="tl-type">{{ e.type }}</div>
+                    <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
                     <div class="tl-time">{{ formatTime(e.time) }}</div>
                     <div class="tl-rel muted">{{ relativeTime(e.time) }}</div>
                   </div>
                   <div class="tl-kv" v-if="payloadEntries(e.payload).length">
                     <div v-for="kv in payloadEntries(e.payload)" :key="kv.k" class="kv-row">
-                      <span class="kv-k">{{ kv.k }}</span>
-                      <span class="kv-v muted">{{ kv.v }}</span>
+                      <span class="kv-k">{{ fieldLabel(kv.k) }}</span>
+                      <span class="kv-v muted" v-if="kv.k !== 'evidence'">{{ kv.v }}</span>
+                      <span class="kv-v muted" v-else>
+                        <details class="kv-details">
+                          <summary>查看证据（JSON）</summary>
+                          <pre class="pre pre-mini">{{ prettyJson(kv.raw) }}</pre>
+                        </details>
+                      </span>
                     </div>
                   </div>
                   <div v-else class="muted small">无附加信息</div>
@@ -499,8 +504,7 @@
         </div>
         <textarea v-model="chatInput" rows="4" placeholder="输入：例如“请研判并一键下发任务包”"></textarea>
         <div class="row">
-          <button @click="sendChat">发送</button>
-          <button class="ghost" @click="fillOneClick">一键派单口令</button>
+          <button @click="sendChatOneClick">发送（一键派单）</button>
         </div>
         <div class="box">
           <div class="muted">智能体输出：</div>
@@ -557,7 +561,7 @@
             <div class="rc-metrics">
               <div><span>总数</span><strong>{{ reportData.metrics?.task_total ?? "-" }}</strong></div>
               <div><span>完成</span><strong>{{ reportData.metrics?.task_done ?? "-" }}</strong></div>
-              <div><span>完成率</span><strong>{{ (reportData.metrics?.task_done_rate ?? 0) | percent }}</strong></div>
+              <div><span>完成率</span><strong>{{ formatPercent(reportData.metrics?.task_done_rate) }}</strong></div>
             </div>
           </div>
           <div class="report-card timeline">
@@ -570,14 +574,24 @@
                 </div>
                 <div class="tl-right">
                   <div class="tl-head">
-                    <div class="tl-type">{{ e.type }}</div>
+<<<<<<< Current (Your changes)
+                  <div class="tl-type">{{ e.type }}</div>
+=======
+                  <div class="tl-type" :title="String(e.type || '')">{{ eventTypeLabel(e.type) }}</div>
+>>>>>>> Incoming (Background Agent changes)
                     <div class="tl-time">{{ formatTime(e.time) }}</div>
                     <div class="tl-rel muted">{{ relativeTime(e.time) }}</div>
                   </div>
                   <div class="tl-kv" v-if="payloadEntries(e.payload).length">
                     <div v-for="kv in payloadEntries(e.payload)" :key="kv.k" class="kv-row">
-                      <span class="kv-k">{{ kv.k }}</span>
-                      <span class="kv-v muted">{{ kv.v }}</span>
+                      <span class="kv-k">{{ fieldLabel(kv.k) }}</span>
+                      <span class="kv-v muted" v-if="kv.k !== 'evidence'">{{ kv.v }}</span>
+                      <span class="kv-v muted" v-else>
+                        <details class="kv-details">
+                          <summary>查看证据（JSON）</summary>
+                          <pre class="pre pre-mini">{{ prettyJson(kv.raw) }}</pre>
+                        </details>
+                      </span>
                     </div>
                   </div>
                   <div v-else class="muted small">无附加信息</div>
@@ -588,7 +602,7 @@
         </div>
         <details class="box" v-if="reportOut">
           <summary class="muted">原始 JSON（调试）</summary>
-          <pre class="pre">{{ reportOut }}</pre>
+        <pre class="pre">{{ reportOut }}</pre>
         </details>
       </section>
     </main>
@@ -3727,6 +3741,23 @@ async function sendChat() {
   // 注意：对话页不自动进入下一步；需要专家确认后再跳转
 }
 
+function ensureOneClickPrompt(msg: string) {
+  const base = (msg || "").trim();
+  const tgt = selectedTarget.value ? targetLabel(selectedTarget.value, areaId.value) : "";
+  const hasOneClick = /一键(派单|下发)/.test(base) || /下发任务包/.test(base);
+  if (!base) {
+    return selectedTarget.value ? `请研判 ${tgt} 并一键下发任务包` : "请研判并一键下发任务包";
+  }
+  if (hasOneClick) return base;
+  // 保留用户输入，同时确保包含“一键派单”语义
+  return `${base}（并一键下发任务包）`;
+}
+
+async function sendChatOneClick() {
+  chatInput.value = ensureOneClickPrompt(chatInput.value);
+  return await sendChat();
+}
+
 function confirmAgentAndNext() {
   if (!agentResult.value) return;
   agentConfirmed.value = true;
@@ -3737,9 +3768,7 @@ function confirmAgentAndNext() {
 }
 
 function fillOneClick() {
-  chatInput.value = selectedTarget.value
-    ? `请研判 ${targetLabel(selectedTarget.value, areaId.value)} 并一键下发任务包`
-    : "请研判并一键下发任务包";
+  chatInput.value = ensureOneClickPrompt(chatInput.value);
 }
 
 function addOntologyEntity() {
@@ -3929,12 +3958,81 @@ function payloadEntries(p: any) {
   if (!p || typeof p !== "object") return [];
   try {
     return Object.entries(p).map(([k, v]) => {
-      const vv = typeof v === "string" ? v : JSON.stringify(v);
-      return { k, v: vv };
+      return { k, raw: v, v: formatKvValue(v) };
     });
   } catch {
     return [];
   }
+}
+
+function formatKvValue(v: any) {
+  if (v === null || v === undefined) return "-";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function prettyJson(v: any) {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v ?? "");
+  }
+}
+
+function fieldLabel(key: string) {
+  const k = String(key || "");
+  const table: Record<string, string> = {
+    title: "标题",
+    target: "目标",
+    target_id: "目标",
+    target_object_id: "目标",
+    area_id: "区域",
+    task_id: "任务ID",
+    task_type: "任务类型",
+    type: "类型",
+    owner_org: "责任单位",
+    owner: "责任单位",
+    sla_minutes: "时限（分钟）",
+    sla: "时限",
+    status: "状态",
+    actor: "执行人",
+    note: "备注",
+    evidence: "证据",
+    gps: "定位",
+    photo: "照片",
+    video: "视频",
+    created_at: "创建时间",
+    time: "时间",
+  };
+  return table[k] || k;
+}
+
+function eventTypeLabel(type: any) {
+  const t = String(type || "").trim();
+  const table: Record<string, string> = {
+    incident_created: "事件创建",
+    alert_event: "告警事件",
+    task_created: "任务创建",
+    task_ack: "任务回执",
+    task_completed: "任务完成",
+    state_changed: "状态变更",
+    task_timeout: "任务超时",
+  };
+  return table[t] || t || "-";
+}
+
+function formatPercent(rate: any) {
+  let n = Number(rate ?? 0);
+  if (!Number.isFinite(n)) n = 0;
+  // 兼容后端返回 0-1 或 0-100
+  if (n <= 1) n = n * 100;
+  n = Math.max(0, Math.min(100, n));
+  const s = Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+  return `${s}%`;
 }
 
 function stringify(obj: any) {
