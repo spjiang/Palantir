@@ -7,7 +7,7 @@
         <span>智能体: {{ agentBase }}</span>
       </div>
       <div class="meta tabs">
-        <button :class="{ active: activePage === 'flow' }" @click="activePage = 'flow'; goStep('map')">闭环分步（五页）</button>
+        <button :class="{ active: activePage === 'flow' }" @click="activePage = 'flow'; goStep('map'); ensureIncident().catch(() => {})">闭环分步（五页）</button>
         <button :class="{ active: activePage === 'main' }" @click="activePage = 'main'">主演示页</button>
         <button :class="{ active: activePage === 'data' }" @click="activePage = 'data'"> L1 数据接入与治理</button>
         <button :class="{ active: activePage === 'ontology' }" @click="activePage = 'ontology'"> L2 本体/语义选型</button>
@@ -43,11 +43,11 @@
             <span class="chip muted">区域：{{ areaId }}</span>
           </div>
           <div class="flow-steps">
-            <button :class="{ active: flowStep === 'map' }" @click="goStep('map')">1 地图(10%)</button>
-            <button :class="{ active: flowStep === 'agent' }" @click="goStep('agent')" :disabled="!selectedTarget">2 对话(20%)</button>
-            <button :class="{ active: flowStep === 'tasks' }" @click="goStep('tasks')" :disabled="!incidentId">3 任务(30%)</button>
-            <button :class="{ active: flowStep === 'ack' }" @click="goStep('ack')" :disabled="!incidentId">4 回执(40%)</button>
-            <button :class="{ active: flowStep === 'report' }" @click="goStep('report')" :disabled="!incidentId">5 战报(50%)</button>
+            <button :class="{ active: flowStep === 'map' }" @click="goStep('map')">1 地图(20%)</button>
+            <button :class="{ active: flowStep === 'agent' }" @click="goStep('agent')" :disabled="!selectedTarget">2 对话(40%)</button>
+            <button :class="{ active: flowStep === 'tasks' }" @click="goStep('tasks')" :disabled="!incidentId">3 任务(60%)</button>
+            <button :class="{ active: flowStep === 'ack' }" @click="goStep('ack')" :disabled="!incidentId">4 回执(80%)</button>
+            <button :class="{ active: flowStep === 'report' }" @click="goStep('report')" :disabled="!incidentId">5 战报(100%)</button>
           </div>
         </div>
 
@@ -106,7 +106,7 @@
           <div class="row">
             <label>事件ID</label>
             <input v-model="incidentId" placeholder="留空可由智能体自动创建" />
-            <button @click="createIncident">新建事件</button>
+            <button @click="createIncident" :disabled="creatingIncident">新建事件</button>
           </div>
           <div class="chips">
             <span class="chip muted">当前区域：{{ areaId }}</span>
@@ -116,11 +116,61 @@
           <div class="row">
             <button @click="sendChat" :disabled="!selectedTarget">发送</button>
             <button class="ghost" @click="fillOneClick" :disabled="!selectedTarget">一键派单口令</button>
-            <button class="ghost" @click="goStep('tasks')" :disabled="!incidentId">下一步：进入任务</button>
+            <button class="ghost" @click="confirmAgentAndNext" :disabled="!agentResult">专家确认无误 → 进入任务</button>
           </div>
           <div class="box">
-            <div class="muted">智能体输出：</div>
-            <pre class="pre">{{ agentOut }}</pre>
+            <div class="muted">智能体输出（结构化展示，供专家确认）：</div>
+
+            <div v-if="agentResult" class="plan">
+              <div class="plan-card">
+                <div class="plan-title">研判摘要</div>
+                <div class="plan-grid">
+                  <div class="plan-item"><span>事件ID</span><strong>{{ agentResult.incident_id || incidentId || "-" }}</strong></div>
+                  <div class="plan-item"><span>目标</span><strong>{{ agentResult.target_id || selectedTarget || "-" }}</strong></div>
+                  <div class="plan-item"><span>区域</span><strong>{{ agentResult.area_id || areaId || "-" }}</strong></div>
+                  <div class="plan-item"><span>建议</span><strong>{{ agentResult.summary || agentResult.message || "-" }}</strong></div>
+                </div>
+              </div>
+
+              <div v-if="agentResult.task_pack || agentResult.taskpack || agentResult.tasks" class="plan-card">
+                <div class="plan-title">任务建议（预案式展示）</div>
+                <div class="muted small">说明：以下为智能体的结构化建议；点击“专家确认无误”后再进入任务执行页。</div>
+                <table class="tbl" v-if="(agentResult.task_pack?.tasks || agentResult.taskpack?.tasks || agentResult.tasks)">
+                  <thead>
+                    <tr>
+                      <th>序号</th>
+                      <th>任务类型</th>
+                      <th>目标</th>
+                      <th>责任单位</th>
+                      <th>SLA</th>
+                      <th>必传证据</th>
+                      <th>备注</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(t, idx) in (agentResult.task_pack?.tasks || agentResult.taskpack?.tasks || agentResult.tasks)"
+                      :key="idx"
+                    >
+                      <td class="muted">{{ idx + 1 }}</td>
+                      <td>{{ t.task_type || t.type || "-" }}</td>
+                      <td>{{ t.target_object_id || t.target_id || agentResult.target_id || selectedTarget || "-" }}</td>
+                      <td>{{ t.owner_org || t.owner || "-" }}</td>
+                      <td>{{ (t.sla_minutes ?? t.sla ?? "-") }}</td>
+                      <td class="muted">{{ (t.required_evidence || t.evidence || []).join(" / ") }}</td>
+                      <td class="muted">{{ t.detail || t.note || "-" }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <details class="plan-card">
+                <summary class="plan-title">原始 JSON（调试）</summary>
+                <pre class="pre">{{ agentOut }}</pre>
+              </details>
+            </div>
+
+            <div v-else class="muted small">尚未发送或暂无输出。</div>
           </div>
         </div>
 
@@ -3126,20 +3176,37 @@ const selectedTarget = ref<string>("");
 const activePage = ref<"flow" | "main" | "data" | "model" | "agent" | "workflow" | "report" | "ontology" | "summary">("main");
 
 const flowStep = ref<"map" | "agent" | "tasks" | "ack" | "report">("map");
+const creatingIncident = ref(false);
+const agentResult = ref<any | null>(null);
+const agentResultError = ref<string>("");
+const agentConfirmed = ref(false);
 const flowProgress = computed(() => {
   return flowStep.value === "map"
-    ? 10
+    ? 20
     : flowStep.value === "agent"
-      ? 20
+      ? 40
       : flowStep.value === "tasks"
-        ? 30
+        ? 60
         : flowStep.value === "ack"
-          ? 40
-          : 50;
+          ? 80
+          : 100;
 });
+
+async function ensureIncident() {
+  if (incidentId.value || creatingIncident.value) return;
+  creatingIncident.value = true;
+  try {
+    await createIncident();
+  } finally {
+    creatingIncident.value = false;
+  }
+}
 
 function goStep(step: "map" | "agent" | "tasks" | "ack" | "report") {
   flowStep.value = step;
+  if (step !== "map") {
+    ensureIncident().catch(() => {});
+  }
   // 进入地图页时确保地图刷新（避免切换后地图未渲染）
   if (step === "map") {
     setTimeout(() => renderMap(), 0);
@@ -3152,6 +3219,9 @@ function resetFlow() {
   selectedTarget.value = "";
   chatInput.value = "请研判并一键下发任务包";
   agentOut.value = "";
+  agentResult.value = null;
+  agentResultError.value = "";
+  agentConfirmed.value = false;
   tasks.value = [];
   reportOut.value = "";
   reportData.value = null;
@@ -3354,6 +3424,10 @@ async function loadTopN() {
 function pickTarget(targetId: string) {
   selectedTarget.value = targetId;
   chatInput.value = `请研判 ${targetId} 并给出任务包建议`;
+  agentConfirmed.value = false;
+  agentResult.value = null;
+  agentResultError.value = "";
+  agentOut.value = "";
   // 分步闭环：点击预警（如 road-008）即跳转到对话页
   if (activePage.value === "flow") {
     flowStep.value = "agent";
@@ -3367,6 +3441,9 @@ async function createIncident() {
 
 async function sendChat() {
   agentOut.value = "请求中...";
+  agentResult.value = null;
+  agentResultError.value = "";
+  agentConfirmed.value = false;
   const { data } = await axios.post(`${agentBase}/agent/chat`, {
     incident_id: incidentId.value || null,
     area_id: areaId.value,
@@ -3376,14 +3453,20 @@ async function sendChat() {
   if (data.incident_id) {
     incidentId.value = data.incident_id;
   }
+  agentResult.value = data;
   agentOut.value = JSON.stringify(data, null, 2);
   // 若智能体自动创建了事件
   if (!incidentId.value) {
     // 从 tasks 里推断不到，这里就用后端的“最新事件”能力简化：直接再新建一个事件让用户可控
     // 演示：如果智能体触发派单，用户通常会先点“新建事件”；这里保持简单不反推。
   }
-  // 分步闭环：对话完成后进入任务页，并尝试自动拉取任务
-  if (activePage.value === "flow" && incidentId.value) {
+  // 注意：对话页不自动进入下一步；需要专家确认后再跳转
+}
+
+function confirmAgentAndNext() {
+  if (!agentResult.value) return;
+  agentConfirmed.value = true;
+  if (activePage.value === "flow") {
     flowStep.value = "tasks";
     loadTasks().catch(() => {});
   }
@@ -3779,6 +3862,50 @@ watch(
 }
 .flow-page {
   margin-top: 10px;
+}
+
+.plan {
+  margin-top: 10px;
+  display: grid;
+  gap: 12px;
+}
+.plan-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.plan-title {
+  font-weight: 800;
+  color: #e5ecff;
+  margin-bottom: 10px;
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.plan-item span {
+  color: #9fb2d4;
+  font-size: 12px;
+}
+.plan-item strong {
+  color: #e5ecff;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.plan-card summary.plan-title {
+  cursor: pointer;
+  user-select: none;
 }
 .grid {
   margin-top: 14px;
