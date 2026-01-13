@@ -7571,6 +7571,8 @@ button:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
+
+  
 }
 .timeline-list.v2 li.tl-item {
   display: grid;
