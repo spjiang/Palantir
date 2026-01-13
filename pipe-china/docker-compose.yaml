@@ -4,6 +4,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        - NPM_REGISTRY=https://registry.npmmirror.com
     container_name: pipe-china-frontend
     environment:
       - VITE_API_BASE=http://localhost:18088
@@ -15,6 +17,9 @@ services:
   api:
     build:
       context: ./api
+      args:
+        - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+        - PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
     container_name: pipe-china-api
     environment:
       - NEO4J_URI=bolt://graphdb:7687

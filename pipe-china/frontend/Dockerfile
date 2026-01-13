@@ -3,8 +3,10 @@ FROM node:18.20.4-alpine3.19
 
 WORKDIR /app
 
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm config set registry ${NPM_REGISTRY} && npm install
 
 COPY . .
 
