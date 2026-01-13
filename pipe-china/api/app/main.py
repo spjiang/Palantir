@@ -22,6 +22,10 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "neo4j_demo_pass")
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip()
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
+
 store = OntologyStore(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
 
 app = FastAPI(title="Pipe-China Ontology/行为建模 API", version="0.1.0")
@@ -42,13 +46,22 @@ def health():
 @app.post("/ontology/import", response_model=ImportResult)
 async def import_doc(file: UploadFile = File(...)):
     """
-    上传 `需求文档.md`，自动提取关键词并写入图数据库。
-    演示级：简单词法切分 + 邻接 co-occurrence 关系。
+    上传 `需求文档.md`，仅使用 DeepSeek 进行本体抽取（实体/关系/规则）并写入图数据库。
+    不提供词法切分/回退模式。
     """
     text = (await file.read()).decode("utf-8", errors="ignore")
     try:
-        result = store.import_from_text(text)
-        return result
+        if not DEEPSEEK_API_KEY:
+            raise HTTPException(400, "DEEPSEEK_API_KEY is empty. Please set it and retry.")
+
+        return await store.import_from_deepseek(
+            text,
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+            model=DEEPSEEK_MODEL,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"import failed: {e}")
 

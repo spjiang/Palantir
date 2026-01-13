@@ -29,6 +29,10 @@ class ImportResult(BaseModel):
     created_edges: int
     sample_nodes: List[Entity] = Field(default_factory=list)
     sample_edges: List[Relation] = Field(default_factory=list)
+    mode: Optional[str] = None
+    llm_enabled: bool = False
+    fallback_used: bool = False
+    message: Optional[str] = None
 
 
 class EntityCreate(BaseModel):

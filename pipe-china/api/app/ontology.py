@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
 
+import httpx
 from neo4j import GraphDatabase, Driver
 
 from .models import Entity, Relation, ImportResult
@@ -106,43 +108,139 @@ class OntologyStore:
 
     # ---------- 文本解析为简单本体 ----------
 
-    def import_from_text(self, text: str) -> ImportResult:
-        sentences = self._split_sentences(text)
-        tokens = self._extract_tokens(sentences)
-        entities = [self.upsert_entity(name=t, label="Concept", props={"source": "import"}) for t in tokens]
+    # 注：按当前产品要求，不再提供“词法切分/规则抽取”导入能力；仅保留 DeepSeek 抽取链路。
 
-        edges: list[Relation] = []
-        # 简单把相邻词汇链接，形成可视化骨架
-        for a, b in zip(entities, entities[1:]):
-            rel = self.create_relation(a.id, b.id, "RELATED_TO", {"source": "co_occurrence"})
-            edges.append(rel)
+    async def import_from_deepseek(
+        self,
+        text: str,
+        *,
+        api_key: str,
+        base_url: str = "https://api.deepseek.com",
+        model: str = "deepseek-chat",
+    ) -> ImportResult:
+        """
+        使用 DeepSeek 从“业务方案文本”抽取实体/关系/规则，并写入 Neo4j。
+        失败时由调用方决定是否回退到 import_from_text。
+        """
+        payload = await self._deepseek_extract(text, api_key=api_key, base_url=base_url, model=model)
+
+        name_to_id: dict[str, str] = {}
+        created_nodes = 0
+        created_edges = 0
+
+        # 1) entities
+        for ent in payload.get("entities", []):
+            name = (ent.get("name") or "").strip()
+            if not name:
+                continue
+            label = (ent.get("label") or "Concept").strip()
+            props = ent.get("props") or {}
+            props = {**props, "source": "deepseek"}
+            node = self.upsert_entity(name=name, label=label, props=props)
+            if name not in name_to_id:
+                created_nodes += 1
+            name_to_id[name] = node.id
+
+        # 2) relations
+        for rel in payload.get("relations", []):
+            rel_type = (rel.get("type") or "RELATED_TO").strip()
+            src_name = (rel.get("src") or "").strip()
+            dst_name = (rel.get("dst") or "").strip()
+            if not src_name or not dst_name:
+                continue
+
+            if src_name not in name_to_id:
+                node = self.upsert_entity(name=src_name, label="Concept", props={"source": "deepseek"})
+                name_to_id[src_name] = node.id
+                created_nodes += 1
+            if dst_name not in name_to_id:
+                node = self.upsert_entity(name=dst_name, label="Concept", props={"source": "deepseek"})
+                name_to_id[dst_name] = node.id
+                created_nodes += 1
+
+            props = rel.get("props") or {}
+            props = {**props, "source": "deepseek"}
+            _ = self.create_relation(name_to_id[src_name], name_to_id[dst_name], rel_type, props)
+            created_edges += 1
+
+        # 3) rules（作为节点入库，并与涉及对象建立关系）
+        for rule in payload.get("rules", []):
+            rname = (rule.get("name") or "").strip()
+            if not rname:
+                continue
+            rprops = {
+                "source": "deepseek",
+                "trigger": rule.get("trigger"),
+                "action": rule.get("action"),
+                "approval_required": rule.get("approval_required"),
+                "sla_minutes": rule.get("sla_minutes"),
+                "required_evidence": rule.get("required_evidence"),
+            }
+            rnode = self.upsert_entity(name=rname, label="Rule", props={k: v for k, v in rprops.items() if v is not None})
+            created_nodes += 1
+
+            involves = rule.get("involves") or []
+            for obj_name in involves:
+                on = (obj_name or "").strip()
+                if not on:
+                    continue
+                if on not in name_to_id:
+                    node = self.upsert_entity(name=on, label="Concept", props={"source": "deepseek"})
+                    name_to_id[on] = node.id
+                    created_nodes += 1
+                _ = self.create_relation(rnode.id, name_to_id[on], "INVOLVES", {"source": "deepseek"})
+                created_edges += 1
+
+        # samples
+        sample_nodes: list[Entity] = []
+        for nm, nid in list(name_to_id.items())[:5]:
+            sample_nodes.append(Entity(id=nid, name=nm, label="Concept", props={"source": "deepseek"}))
 
         return ImportResult(
-            created_nodes=len(entities),
-            created_edges=len(edges),
-            sample_nodes=entities[:5],
-            sample_edges=edges[:5],
+            created_nodes=created_nodes,
+            created_edges=created_edges,
+            sample_nodes=sample_nodes,
+            sample_edges=[],
+            mode="llm",
+            llm_enabled=True,
+            fallback_used=False,
+            message="DeepSeek 抽取完成并已写入图数据库",
         )
 
-    @staticmethod
-    def _split_sentences(text: str) -> list[str]:
-        parts = re.split(r"[。；;.!?\n]", text)
-        return [p.strip() for p in parts if p.strip()]
+    async def _deepseek_extract(self, text: str, *, api_key: str, base_url: str, model: str) -> dict:
+        url = f"{base_url.rstrip('/')}/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        prompt = (
+            "你是城市管网运维领域的本体抽取助手。"
+            "请从给定的【业务方案】中抽取：entities（实体）、relations（关系）、rules（规则）。\n"
+            "要求：只输出严格 JSON（不要 Markdown，不要解释文字）。\n"
+            "JSON Schema：\n"
+            "{\n"
+            '  "entities": [{"name": "实体名", "label": "类型/标签", "props": {"desc": "...", "location": "..."} }],\n'
+            '  "relations": [{"type": "关系类型", "src": "源实体名", "dst": "目标实体名", "props": {"desc": "..."} }],\n'
+            '  "rules": [{"name": "规则名", "trigger": "触发条件", "action": "动作/任务", "approval_required": true/false,'
+            ' "sla_minutes": 30, "required_evidence": ["定位","照片"], "involves": ["实体名1","实体名2"]}]\n'
+            "}\n"
+            "注意：实体名请尽量使用业务原词（如：泵站、管段、阀门、雨量站、报警事件、任务、事件/工单）。\n\n"
+            f"【业务方案】\n{text}\n"
+        )
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+        }
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            r = await client.post(url, headers=headers, json=body)
+            r.raise_for_status()
+            data = r.json()
+            content = data["choices"][0]["message"]["content"]
 
-    @staticmethod
-    def _extract_tokens(sentences: Iterable[str]) -> list[str]:
-        tokens: list[str] = []
-        for sent in sentences:
-            for token in re.findall(r"[A-Za-z0-9\u4e00-\u9fa5]{2,12}", sent):
-                if len(token) < 2:
-                    continue
-                tokens.append(token)
-        # 去重保序
-        seen = set()
-        uniq = []
-        for t in tokens:
-            if t in seen:
-                continue
-            seen.add(t)
-            uniq.append(t)
-        return uniq[:40]
+        # 兼容模型偶尔包 ```json ... ```
+        content = content.strip()
+        content = re.sub(r"^```json\s*", "", content, flags=re.IGNORECASE)
+        content = re.sub(r"^```\s*", "", content)
+        content = re.sub(r"\s*```$", "", content)
+
+        return json.loads(content)
+
+    # （保留 _deepseek_extract 的轻量内容清洗；不再需要词法抽取辅助函数）

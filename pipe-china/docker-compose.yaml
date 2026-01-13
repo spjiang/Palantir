@@ -6,7 +6,7 @@ services:
       context: ./frontend
     container_name: pipe-china-frontend
     environment:
-      - VITE_API_BASE=http://localhost:8088
+      - VITE_API_BASE=http://localhost:18088
     ports:
       - "18081:8081"
     depends_on:
@@ -22,6 +22,11 @@ services:
       - NEO4J_PASSWORD=neo4j_demo_pass
       - UVICORN_HOST=0.0.0.0
       - UVICORN_PORT=8080
+      # DeepSeek（必需）：本体导入 /ontology/import 强制调用 DeepSeek 抽取并写入图数据库
+      # 请把下面的 Key 替换为你的真实 Key（建议后续改为 .env 注入，避免明文提交）
+      - DEEPSEEK_API_KEY=sk-e4fa8278a0104567b5a41a68325e7121
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
     ports:
       - "18088:8080"
     depends_on:
