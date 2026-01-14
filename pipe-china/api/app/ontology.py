@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 import uuid
 from typing import List, Tuple
 
@@ -47,14 +48,29 @@ class OntologyStore:
         data = rec.data()
         return Entity(id=data["id"], label=data.get("label", "Concept"), name=data["name"], props=self._loads_props(data.get("props_json")))
 
-    def create_relation(self, src: str, dst: str, rel_type: str, props: dict) -> Relation:
-        rel_id = f"rel-{uuid.uuid4().hex[:8]}"
+    def upsert_entity_by_id(self, entity_id: str, name: str, label: str, props: dict) -> Entity:
+        """按 id 幂等写入（用于草稿确认入库）。"""
+        props_json = json.dumps(props or {}, ensure_ascii=False)
+        query = """
+        MERGE (n:Concept {id:$id})
+        SET n.name = $name,
+            n.label = $label,
+            n.props_json = $props_json
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, id=entity_id, name=name, label=label, props_json=props_json).single()
+        data = rec.data()
+        return Entity(id=data["id"], label=data.get("label", "Concept"), name=data["name"], props=self._loads_props(data.get("props_json")))
+
+    def create_relation(self, src: str, dst: str, rel_type: str, props: dict, *, rel_id: str | None = None) -> Relation:
+        rel_id = rel_id or f"rel-{uuid.uuid4().hex[:8]}"
         props_json = json.dumps(props or {}, ensure_ascii=False)
         query = """
         MATCH (s {id:$src})
         MATCH (d {id:$dst})
-        MERGE (s)-[r:REL {type:$type}]->(d)
-        SET r.id = coalesce(r.id, $id),
+        MERGE (s)-[r:REL {id:$id}]->(d)
+        SET r.type = $type,
             r.props_json = $props_json
         RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
         """
@@ -63,18 +79,165 @@ class OntologyStore:
         data = rec.data()
         return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
 
-    def query_graph(self, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
-        if root_id:
+    def upsert_relation_by_id(self, rel_id: str, src: str, dst: str, rel_type: str, props: dict) -> Relation:
+        props_json = json.dumps(props or {}, ensure_ascii=False)
+        query = """
+        MATCH (s {id:$src})
+        MATCH (d {id:$dst})
+        MERGE (s)-[r:REL {id:$id}]->(d)
+        SET r.type = $type,
+            r.props_json = $props_json
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, id=rel_id, src=src, dst=dst, type=rel_type, props_json=props_json).single()
+        data = rec.data()
+        return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
+
+    def list_entities(self, limit: int = 500) -> list[Entity]:
+        query = """
+        MATCH (n:Concept)
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
+        ORDER BY n.name ASC
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            items: list[Entity] = []
+            for rec in session.run(query, limit=limit):
+                data = rec.data()
+                items.append(
+                    Entity(
+                        id=data["id"],
+                        label=data.get("label", "Concept"),
+                        name=data.get("name") or "",
+                        props=self._loads_props(data.get("props_json")),
+                    )
+                )
+            return items
+
+    def list_relations(self, limit: int = 2000) -> list[Relation]:
+        query = """
+        MATCH (s)-[r:REL]->(d)
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        ORDER BY r.type ASC
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            items: list[Relation] = []
+            for rec in session.run(query, limit=limit):
+                data = rec.data()
+                items.append(
+                    Relation(
+                        id=data.get("id") or "",
+                        type=data.get("type", "RELATED_TO"),
+                        src=data.get("src") or "",
+                        dst=data.get("dst") or "",
+                        props=self._loads_props(data.get("props_json")),
+                    )
+                )
+            return items
+
+    def update_entity(self, entity_id: str, name: str | None, label: str | None, props: dict | None) -> Entity:
+        query = """
+        MATCH (n:Concept {id:$id})
+        SET n.name = coalesce($name, n.name),
+            n.label = coalesce($label, n.label),
+            n.props_json = coalesce($props_json, n.props_json)
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
+        """
+        props_json = None if props is None else json.dumps(props, ensure_ascii=False)
+        with self.driver.session() as session:
+            rec = session.run(query, id=entity_id, name=name, label=label, props_json=props_json).single()
+        if not rec:
+            raise ValueError("entity not found")
+        data = rec.data()
+        return Entity(id=data["id"], label=data.get("label", "Concept"), name=data["name"], props=self._loads_props(data.get("props_json")))
+
+    def delete_entity(self, entity_id: str) -> None:
+        query = "MATCH (n:Concept {id:$id}) DETACH DELETE n"
+        with self.driver.session() as session:
+            session.run(query, id=entity_id).consume()
+
+    def get_relation(self, rel_id: str) -> Relation | None:
+        query = """
+        MATCH (s)-[r:REL {id:$id}]->(d)
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, id=rel_id).single()
+        if not rec:
+            return None
+        data = rec.data()
+        return Relation(
+            id=data.get("id") or "",
+            type=data.get("type", "RELATED_TO"),
+            src=data.get("src") or "",
+            dst=data.get("dst") or "",
+            props=self._loads_props(data.get("props_json")),
+        )
+
+    def update_relation(self, rel_id: str, rel_type: str | None, src: str | None, dst: str | None, props: dict | None) -> Relation:
+        # 若需要改 src/dst：删除重建（关系无法直接“移动”到新端点）
+        current = self.get_relation(rel_id)
+        if not current:
+            raise ValueError("relation not found")
+
+        new_src = src or current.src
+        new_dst = dst or current.dst
+        new_type = rel_type or current.type
+        new_props = current.props if props is None else props
+
+        if new_src != current.src or new_dst != current.dst:
+            self.delete_relation(rel_id)
+            # 复用 rel_id，便于前端跟踪
+            props_json = json.dumps(new_props or {}, ensure_ascii=False)
             query = """
-            MATCH p=(n {id:$root})-[*1..$depth]->(m)
+            MATCH (s {id:$src})
+            MATCH (d {id:$dst})
+            CREATE (s)-[r:REL]->(d)
+            SET r.id = $id,
+                r.type = $type,
+                r.props_json = $props_json
+            RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+            """
+            with self.driver.session() as session:
+                rec = session.run(query, src=new_src, dst=new_dst, id=rel_id, type=new_type, props_json=props_json).single()
+            data = rec.data()
+            return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
+
+        # 仅更新属性
+        props_json = None if props is None else json.dumps(props, ensure_ascii=False)
+        query = """
+        MATCH (s)-[r:REL {id:$id}]->(d)
+        SET r.type = coalesce($type, r.type),
+            r.props_json = coalesce($props_json, r.props_json)
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, id=rel_id, type=rel_type, props_json=props_json).single()
+        data = rec.data()
+        return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
+
+    def delete_relation(self, rel_id: str) -> None:
+        query = "MATCH ()-[r:REL {id:$id}]-() DELETE r"
+        with self.driver.session() as session:
+            session.run(query, id=rel_id).consume()
+
+    def query_graph(self, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
+        # Neo4j 不允许在可变长度模式里使用参数（[*1..$depth] 会报错），
+        # 因此这里把 depth（已在上层做过限制）作为字面量拼到 Cypher 中。
+        depth = max(1, min(int(depth), 4))
+        if root_id:
+            query = f"""
+            MATCH p=(n {{id:$root}})-[*1..{depth}]->(m)
             WITH nodes(p) AS ns, relationships(p) AS rs
             RETURN ns, rs
             UNION
-            MATCH p=(n {id:$root})<-[*1..$depth]-(m)
+            MATCH p=(n {{id:$root}})<-[*1..{depth}]-(m)
             WITH nodes(p) AS ns, relationships(p) AS rs
             RETURN ns, rs
             """
-            params = {"root": root_id, "depth": depth}
+            params = {"root": root_id}
         else:
             query = """
             MATCH p=()-[r]->()
@@ -130,64 +293,66 @@ class OntologyStore:
 
     # 注：按当前产品要求，不再提供“词法切分/规则抽取”导入能力；仅保留 DeepSeek 抽取链路。
 
-    async def import_from_deepseek(
+    async def extract_draft_from_deepseek(
         self,
         text: str,
         *,
         api_key: str,
         base_url: str = "https://api.deepseek.com",
         model: str = "deepseek-chat",
-    ) -> ImportResult:
+    ) -> tuple[str, list[Entity], list[Relation]]:
         """
-        使用 DeepSeek 从“业务方案文本”抽取实体/关系/规则，并写入 Neo4j。
-        失败时由调用方决定是否回退到 import_from_text。
+        DeepSeek 抽取“草稿本体图”（不入库）：
+        - 为每个实体生成稳定 id：ent-<sha1(name)>
+        - 为每条关系生成稳定 id：rel-<sha1(src|type|dst)>
         """
         payload = await self._deepseek_extract(text, api_key=api_key, base_url=base_url, model=model)
+        draft_id = f"draft-{uuid.uuid4().hex[:10]}"
 
-        name_to_id: dict[str, str] = {}
-        created_nodes = 0
-        created_edges = 0
+        def ent_id(name: str) -> str:
+            return f"ent-{hashlib.sha1(name.encode('utf-8')).hexdigest()[:10]}"
 
-        # 1) entities
+        nodes: dict[str, Entity] = {}
+        edges: dict[str, Relation] = {}
+
+        # entities
         for ent in payload.get("entities", []):
             name = (ent.get("name") or "").strip()
             if not name:
                 continue
-            label = (ent.get("label") or "Concept").strip()
+            label = (ent.get("label") or "Concept").strip() or "Concept"
             props = ent.get("props") or {}
             props = {**props, "source": "deepseek"}
-            node = self.upsert_entity(name=name, label=label, props=props)
-            if name not in name_to_id:
-                created_nodes += 1
-            name_to_id[name] = node.id
+            eid = ent_id(name)
+            nodes[eid] = Entity(id=eid, name=name, label=label, props=props)
 
-        # 2) relations
+        # relations（若实体缺失则补 Concept）
+        def ensure_node(nm: str) -> str:
+            nm = nm.strip()
+            eid = ent_id(nm)
+            if eid not in nodes:
+                nodes[eid] = Entity(id=eid, name=nm, label="Concept", props={"source": "deepseek"})
+            return eid
+
         for rel in payload.get("relations", []):
-            rel_type = (rel.get("type") or "RELATED_TO").strip()
+            rel_type = (rel.get("type") or "RELATED_TO").strip() or "RELATED_TO"
             src_name = (rel.get("src") or "").strip()
             dst_name = (rel.get("dst") or "").strip()
             if not src_name or not dst_name:
-                continue
-
-            if src_name not in name_to_id:
-                node = self.upsert_entity(name=src_name, label="Concept", props={"source": "deepseek"})
-                name_to_id[src_name] = node.id
-                created_nodes += 1
-            if dst_name not in name_to_id:
-                node = self.upsert_entity(name=dst_name, label="Concept", props={"source": "deepseek"})
-                name_to_id[dst_name] = node.id
-                created_nodes += 1
-
+                    continue
+            src = ensure_node(src_name)
+            dst = ensure_node(dst_name)
             props = rel.get("props") or {}
             props = {**props, "source": "deepseek"}
-            _ = self.create_relation(name_to_id[src_name], name_to_id[dst_name], rel_type, props)
-            created_edges += 1
+            rid = f"rel-{hashlib.sha1(f'{src}|{rel_type}|{dst}'.encode('utf-8')).hexdigest()[:12]}"
+            edges[rid] = Relation(id=rid, type=rel_type, src=src, dst=dst, props=props)
 
-        # 3) rules（作为节点入库，并与涉及对象建立关系）
+        # rules：作为节点 + INVOLVES 关系
         for rule in payload.get("rules", []):
             rname = (rule.get("name") or "").strip()
             if not rname:
                 continue
+            rid_node = ent_id(rname)
             rprops = {
                 "source": "deepseek",
                 "trigger": rule.get("trigger"),
@@ -196,36 +361,29 @@ class OntologyStore:
                 "sla_minutes": rule.get("sla_minutes"),
                 "required_evidence": rule.get("required_evidence"),
             }
-            rnode = self.upsert_entity(name=rname, label="Rule", props={k: v for k, v in rprops.items() if v is not None})
-            created_nodes += 1
-
+            nodes[rid_node] = Entity(id=rid_node, name=rname, label="Rule", props={k: v for k, v in rprops.items() if v is not None})
             involves = rule.get("involves") or []
             for obj_name in involves:
-                on = (obj_name or "").strip()
-                if not on:
+                nm = (obj_name or "").strip()
+                if not nm:
                     continue
-                if on not in name_to_id:
-                    node = self.upsert_entity(name=on, label="Concept", props={"source": "deepseek"})
-                    name_to_id[on] = node.id
-                    created_nodes += 1
-                _ = self.create_relation(rnode.id, name_to_id[on], "INVOLVES", {"source": "deepseek"})
-                created_edges += 1
+                oid = ensure_node(nm)
+                rrel_id = f"rel-{hashlib.sha1(f'{rid_node}|INVOLVES|{oid}'.encode('utf-8')).hexdigest()[:12]}"
+                edges[rrel_id] = Relation(id=rrel_id, type="INVOLVES", src=rid_node, dst=oid, props={"source": "deepseek"})
 
-        # samples
-        sample_nodes: list[Entity] = []
-        for nm, nid in list(name_to_id.items())[:5]:
-            sample_nodes.append(Entity(id=nid, name=nm, label="Concept", props={"source": "deepseek"}))
+        return draft_id, list(nodes.values()), list(edges.values())
 
-        return ImportResult(
-            created_nodes=created_nodes,
-            created_edges=created_edges,
-            sample_nodes=sample_nodes,
-            sample_edges=[],
-            mode="llm",
-            llm_enabled=True,
-            fallback_used=False,
-            message="DeepSeek 抽取完成并已写入图数据库",
-        )
+    def commit_draft(self, nodes: list[Entity], edges: list[Relation]) -> tuple[int, int]:
+        """把草稿图写入 Neo4j（幂等按 id upsert）。"""
+        created_nodes = 0
+        created_edges = 0
+        for n in nodes:
+            self.upsert_entity_by_id(n.id, n.name, n.label or "Concept", n.props or {})
+            created_nodes += 1
+        for e in edges:
+            self.upsert_relation_by_id(e.id, e.src, e.dst, e.type or "RELATED_TO", e.props or {})
+            created_edges += 1
+        return created_nodes, created_edges
 
     @staticmethod
     def _loads_props(v) -> dict:

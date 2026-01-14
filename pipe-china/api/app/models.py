@@ -24,6 +24,18 @@ class GraphResponse(BaseModel):
     edges: List[Relation]
 
 
+class DraftExtractResponse(BaseModel):
+    draft_id: str
+    nodes: List[Entity]
+    edges: List[Relation]
+
+
+class DraftCommitRequest(BaseModel):
+    draft_id: str | None = None
+    nodes: List[Entity]
+    edges: List[Relation]
+
+
 class ImportResult(BaseModel):
     created_nodes: int
     created_edges: int
@@ -41,11 +53,24 @@ class EntityCreate(BaseModel):
     props: dict[str, Any] = Field(default_factory=dict)
 
 
+class EntityUpdate(BaseModel):
+    name: str | None = None
+    label: str | None = None
+    props: dict[str, Any] | None = None
+
+
 class RelationCreate(BaseModel):
     type: str = "RELATED_TO"
     src: str
     dst: str
     props: dict[str, Any] = Field(default_factory=dict)
+
+
+class RelationUpdate(BaseModel):
+    type: str | None = None
+    src: str | None = None
+    dst: str | None = None
+    props: dict[str, Any] | None = None
 
 
 class GraphQuery(BaseModel):
