@@ -95,10 +95,10 @@
             </template>
           </div>
 
-          <div class="panel-footer">
-            <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntity">
-              {{ createBtnText }}
-            </button>
+        <div class="panel-footer">
+          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntityModal">
+            {{ createBtnText }}
+          </button>
             <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
               {{ linkMode ? '退出创建关系' : '创建关系' }}
             </button>
@@ -122,8 +122,8 @@
             <label>Props（JSON）</label>
             <textarea v-model="editNode.propsText" rows="10" class="mono"></textarea>
             <div class="btnrow">
-              <button class="btn" :disabled="loading" @click="saveNode">保存</button>
-              <button class="btn danger" :disabled="loading" @click="deleteNode">删除</button>
+            <button class="btn" :disabled="loading" @click="saveNode">保存</button>
+            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteNode')">删除</button>
             </div>
           </template>
 
@@ -145,8 +145,8 @@
             <label>Props（JSON）</label>
             <textarea v-model="editEdge.propsText" rows="10" class="mono"></textarea>
             <div class="btnrow">
-              <button class="btn" :disabled="loading" @click="saveEdge">保存</button>
-              <button class="btn danger" :disabled="loading" @click="deleteEdge">删除</button>
+            <button class="btn" :disabled="loading" @click="saveEdge">保存</button>
+            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteEdge')">删除</button>
             </div>
           </template>
 
@@ -158,6 +158,43 @@
             <textarea v-model="linkDraft.propsText" rows="6" class="mono"></textarea>
             <button class="btn" :disabled="loading" @click="createLink">创建该关系</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- create entity modal -->
+    <div v-if="createModal.open" class="modal-backdrop" @click.self="closeCreateModal">
+      <div class="modal">
+        <div class="modal-title">{{ createBtnText }}</div>
+        <div class="modal-sub">建议填写一个有意义的 ID（例如：beh-xxx / rule-xxx / state-xxx / obj-xxx）。不填则系统自动生成。</div>
+
+        <label>ID（可选）</label>
+        <input v-model="createModal.form.id" class="mono" placeholder="例如 beh-detect-anomaly" />
+
+        <label>名称（必填）</label>
+        <input v-model="createModal.form.name" placeholder="请输入名称" />
+
+        <label>类型（label）</label>
+        <input v-model="createModal.form.label" class="mono" readonly />
+
+        <label>Props（JSON）</label>
+        <textarea v-model="createModal.form.propsText" rows="10" class="mono"></textarea>
+
+        <div class="btnrow">
+          <button class="btn secondary" :disabled="loading" @click="closeCreateModal">取消</button>
+          <button class="btn" :disabled="loading || !createModal.form.name.trim()" @click="createEntityFromModal">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- confirm danger modal -->
+    <div v-if="confirmModal.open" class="modal-backdrop" @click.self="closeConfirmModal">
+      <div class="modal danger">
+        <div class="modal-title">{{ confirmModal.title }}</div>
+        <div class="modal-sub">{{ confirmModal.message }}</div>
+        <div class="btnrow">
+          <button class="btn secondary" :disabled="loading" @click="closeConfirmModal">取消</button>
+          <button class="btn danger" :disabled="loading" @click="runConfirmAction">确认</button>
         </div>
       </div>
     </div>
@@ -474,41 +511,17 @@ async function extract() {
 
 async function commitDraft() {
   if (!props.draftId) return;
-  const ok = confirm("确认将草稿入库到正式图数据库吗？");
-  if (!ok) return;
-  loading.value = true;
-  try {
-    const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/commit`, { method: "POST" });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    toastSuccess(`入库成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
-    emit("committed");
-    emit("draft-cleared");
-  } catch (e) {
-    toastError(`入库失败: ${e}`);
-  } finally {
-    loading.value = false;
-  }
+  confirmDanger("commitDraft");
+  return;
 }
 
 async function cancelDraft() {
   if (!props.draftId) return;
-  const ok = confirm("确认取消草稿？将删除临时图谱数据。");
-  if (!ok) return;
-  loading.value = true;
-  try {
-    const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(await res.text());
-    toastSuccess("草稿已取消并清理");
-    emit("draft-cleared");
-  } catch (e) {
-    toastError(`取消失败: ${e}`);
-  } finally {
-    loading.value = false;
-  }
+  confirmDanger("cancelDraft");
+  return;
 }
 
-async function openCreateEntity() {
+function openCreateEntityModal() {
   const label =
     nodeTab.value === "behaviors"
       ? "Behavior"
@@ -517,31 +530,46 @@ async function openCreateEntity() {
         : nodeTab.value === "states"
           ? "State"
           : "Concept";
-  const name = prompt(`请输入${label === "Concept" ? "对象" : label === "Behavior" ? "行为" : label === "Rule" ? "规则" : "状态"}名称：`);
-  if (!name) return;
+  const propsTemplate =
+    label === "Behavior"
+      ? { source: "manual", preconditions: [], effects: [], inputs: [], outputs: [], version: "v1" }
+      : label === "Rule"
+        ? { source: "manual", trigger: "", action: "", approval_required: false, required_evidence: [] }
+        : label === "State"
+          ? { source: "manual", domain: "RiskState", meaning: "" }
+          : { source: "manual", desc: "" };
+  createModal.value = {
+    open: true,
+    form: { id: "", name: "", label, propsText: JSON.stringify(propsTemplate, null, 2) },
+  };
+}
+
+function closeCreateModal() {
+  createModal.value.open = false;
+}
+
+async function createEntityFromModal() {
+  const label = createModal.value.form.label;
+  const name = createModal.value.form.name.trim();
+  const id = (createModal.value.form.id || "").trim() || null;
+  const propsObj = safeParseJson(createModal.value.form.propsText);
   loading.value = true;
   try {
     const url =
       props.scope === "draft"
         ? `${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/entities`
         : `${props.apiBase}/ontology/entities`;
-    const propsTemplate =
-      label === "Behavior"
-        ? { source: "manual", preconditions: [], effects: [], inputs: [], outputs: [], version: "v1" }
-        : label === "Rule"
-          ? { source: "manual", trigger: "", action: "", approval_required: false, required_evidence: [] }
-          : label === "State"
-            ? { source: "manual", domain: "RiskState", meaning: "" }
-            : { source: "manual", desc: "" };
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, label, props: propsTemplate }),
+      body: JSON.stringify({ id, name, label, props: propsObj }),
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     await refresh();
     selectNodeById(data.id);
+    toastSuccess(`创建成功：${data.name}（ID=${data.id}）`);
+    closeCreateModal();
   } catch (e) {
     toastError(`新建实体失败: ${e}`);
   } finally {
@@ -607,8 +635,6 @@ async function saveNode() {
 }
 
 async function deleteNode() {
-  const ok = confirm("确认删除该实体？相关关系也会被删除。");
-  if (!ok) return;
   loading.value = true;
   try {
     const url =
@@ -652,8 +678,6 @@ async function saveEdge() {
 }
 
 async function deleteEdge() {
-  const ok = confirm("确认删除该关系？");
-  if (!ok) return;
   loading.value = true;
   try {
     const url =
@@ -673,21 +697,8 @@ async function deleteEdge() {
 }
 
 async function purgeAll() {
-  const ok1 = confirm("危险操作：将清空【正式图谱 + 草稿图谱】的所有节点与关系，且不可恢复。确认继续？");
-  if (!ok1) return;
-  const ok2 = confirm("再次确认：你确定要清空整个图数据库吗？（不可恢复）");
-  if (!ok2) return;
-  loading.value = true;
-  try {
-    const res = await fetch(`${props.apiBase}/ontology/admin/purge?confirm=YES`, { method: "POST" });
-    if (!res.ok) throw new Error(await res.text());
-    toastSuccess("已清空图数据库");
-    emit("purged");
-  } catch (e) {
-    toastError(`清空失败: ${e}`);
-  } finally {
-    loading.value = false;
-  }
+  confirmDanger("purgeAll");
+  return;
 }
 
 onMounted(async () => {
@@ -701,6 +712,87 @@ watch(
   }
 );
 watch(selected, () => highlightSelected());
+
+const createModal = ref({
+  open: false,
+  form: { id: "", name: "", label: "Concept", propsText: "{}" },
+});
+
+const confirmModal = ref({
+  open: false,
+  title: "确认操作",
+  message: "",
+  action: null,
+});
+
+function closeConfirmModal() {
+  confirmModal.value.open = false;
+  confirmModal.value.action = null;
+}
+
+function confirmDanger(action) {
+  const map = {
+    deleteNode: { title: "删除实体", message: "确认删除该实体？相关关系也会被删除。", action: deleteNode },
+    deleteEdge: { title: "删除关系", message: "确认删除该关系？", action: deleteEdge },
+    cancelDraft: { title: "取消草稿", message: "确认取消草稿？将删除临时图谱数据，且不可恢复。", action: cancelDraftDo },
+    commitDraft: { title: "确认入库", message: "确认将草稿入库到正式图数据库吗？入库后草稿将被清理。", action: commitDraftDo },
+    purgeAll: { title: "清空图数据库", message: "危险：将清空【正式图谱 + 草稿图谱】的所有节点与关系，且不可恢复。", action: purgeAllDo },
+  };
+  const item = map[action];
+  if (!item) return;
+  confirmModal.value = { open: true, title: item.title, message: item.message, action: item.action };
+}
+
+async function runConfirmAction() {
+  const fn = confirmModal.value.action;
+  closeConfirmModal();
+  if (typeof fn === "function") await fn();
+}
+
+// 将需要确认的操作拆出，避免递归 confirm
+async function commitDraftDo() {
+  loading.value = true;
+  try {
+    const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/commit`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    toastSuccess(`入库成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
+    emit("committed");
+    emit("draft-cleared");
+  } catch (e) {
+    toastError(`入库失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function cancelDraftDo() {
+  loading.value = true;
+  try {
+    const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    toastSuccess("草稿已取消并清理");
+    emit("draft-cleared");
+  } catch (e) {
+    toastError(`取消失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function purgeAllDo() {
+  loading.value = true;
+  try {
+    const res = await fetch(`${props.apiBase}/ontology/admin/purge?confirm=YES`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+    toastSuccess("已清空图数据库");
+    emit("purged");
+  } catch (e) {
+    toastError(`清空失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <style scoped>

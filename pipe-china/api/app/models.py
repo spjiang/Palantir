@@ -48,6 +48,7 @@ class ImportResult(BaseModel):
 
 
 class EntityCreate(BaseModel):
+    id: str | None = None
     name: str
     label: str = "Concept"
     props: dict[str, Any] = Field(default_factory=dict)
@@ -60,6 +61,7 @@ class EntityUpdate(BaseModel):
 
 
 class RelationCreate(BaseModel):
+    id: str | None = None
     type: str = "RELATED_TO"
     src: str
     dst: str

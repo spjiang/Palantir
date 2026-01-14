@@ -4,6 +4,7 @@ import json
 import re
 import hashlib
 import uuid
+from pathlib import Path
 from typing import List, Tuple
 
 from neo4j import GraphDatabase, Driver
@@ -41,8 +42,8 @@ class OntologyStore:
         node_id = f"ent-{uuid.uuid4().hex[:8]}"
         props_json = json.dumps(props or {}, ensure_ascii=False)
         query = """
-        MERGE (n:Concept {name:$name})
-        SET n.id = coalesce(n.id, $id),
+        MERGE (n:Concept {id:$id})
+        SET n.name = $name,
             n.label = $label,
             n.props_json = $props_json
         RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
@@ -666,31 +667,9 @@ class OntologyStore:
             return {}
 
     async def _deepseek_extract(self, text: str, *, api_key: str, base_url: str, model: str) -> dict:
-        prompt = (
-            "你是【油气管网运维】领域的本体论/行为建模抽取助手。\n"
-            "核心要求：一定要以【行为建模】为中心，把业务方案里的“条件→行为→状态变化→新数据/证据”显性化。\n"
-            "语言要求：能用中文的地方都用中文（实体 name、关系 type、规则 trigger/action、证据名称等尽量用中文）。\n"
-            "为保证产品识别与配色，label 使用英文枚举（Behavior/Rule/State/Evidence/Artifact/...），但 name 必须尽量中文。\n"
-            "只输出严格 JSON（不要 Markdown，不要解释文字）。\n"
-            "\n"
-            "你必须输出：\n"
-            "- entities：对象/状态/证据/任务/事件等（label 必须贴近真实产品，如 PipelineSegment/Sensor/Alarm/MaintenanceTask/Evidence/Incident/Station/State/Behavior/Rule/Artifact）\n"
-            "- behaviors：行为（必须包含至少：DetectAnomaly、AssessLeakRisk、DecideResponseAction、ExecuteMaintenance、WriteBack 或其业务同义词），并尽量给出 state_from/state_to\n"
-            "- rules：规则（尽量绑定到具体 behavior，并给出 required_evidence、approval_required 等）\n"
-            "- relations：结构关系（HAS_SENSOR、TARGETS、EXECUTES、HAS_EVIDENCE、CONTAINS、CONNECTED_TO 等）\n"
-            "- state_transitions：状态迁移表（可选但强烈建议）\n"
-            "\n"
-            "JSON Schema（字段允许为空，但 key 必须存在）：\n"
-            "{\n"
-            '  "entities": [{"name":"实体名","label":"类型","props":{}}],\n'
-            '  "relations": [{"type":"关系类型","src":"源实体名","dst":"目标实体名","props":{}}],\n'
-            '  "behaviors": [{"name":"行为名","preconditions":["..."],"affects":["实体名"],"state_from":"状态名","state_to":"状态名","produces":["产物/证据/任务"],"inputs":["..."],"outputs":["..."],"effects":["..."],"desc":"..."}],\n'
-            '  "rules": [{"name":"规则名","behavior":"行为名","trigger":"触发条件","action":"动作/任务","approval_required":true,"sla_minutes":30,"required_evidence":["..."],"forbids":["行为名"],"allows":["行为名"],"involves":["实体名1","实体名2"]}],\n'
-            '  "state_transitions": [{"object":"实体名","from":"状态名","to":"状态名","via":"行为名"}]\n'
-            "}\n"
-            "\n"
-            "抽取优先级：先 behaviors/state_transitions，再 rules，再 entities/relations。\n"
-            f"【业务方案】\n{text}\n"
+        prompt = self._render_prompt_template(
+            template_name="deepseek_extract.md",
+            context={"BUSINESS_TEXT": text},
         )
         try:
             # 对齐官方示例：OpenAI SDK + base_url 指向 DeepSeek
@@ -719,5 +698,30 @@ class OntologyStore:
             return json.loads(content)
         except json.JSONDecodeError as e:
             raise RuntimeError(f"DeepSeek returned non-JSON content (head): {content[:800]}") from e
+
+    @staticmethod
+    def _render_prompt_template(template_name: str, context: dict[str, str]) -> str:
+        """
+        读取 Markdown 提示词模板并做简单变量替换，便于非开发人员直接改提示词。
+        默认模板位置：app/prompts/<template_name>
+        占位符格式：{{VAR_NAME}}
+        """
+        base = Path(__file__).resolve().parent
+        path = base / "prompts" / template_name
+        if not path.exists():
+            # 兜底：避免模板文件丢失导致线上不可用
+            fallback = (
+                "你是【油气管网运维】领域的本体论/行为建模抽取助手。\n"
+                "核心要求：一定要以【行为建模】为中心，把业务方案里的“条件→行为→状态变化→新数据/证据”显性化。\n"
+                "语言要求：能用中文的地方都用中文（实体 name、关系 type、规则 trigger/action、证据名称等尽量用中文）。\n"
+                "为保证产品识别与配色，label 使用英文枚举（Behavior/Rule/State/Evidence/Artifact/...），但 name 必须尽量中文。\n"
+                "只输出严格 JSON（不要 Markdown，不要解释文字）。\n\n"
+                f"【业务方案】\n{context.get('BUSINESS_TEXT','')}\n"
+            )
+            return fallback
+        tpl = path.read_text(encoding="utf-8")
+        for k, v in context.items():
+            tpl = tpl.replace(f"{{{{{k}}}}}", v)
+        return tpl.strip()
 
     # （保留 _deepseek_extract 的轻量内容清洗；不再需要词法抽取辅助函数）
