@@ -29,13 +29,16 @@
       <div class="panel left">
         <div class="panel-title">本体数据</div>
         <div class="tabs">
-          <button class="tab" :class="{ active: listMode === 'entities' }" @click="listMode = 'entities'">实体</button>
-          <button class="tab" :class="{ active: listMode === 'relations' }" @click="listMode = 'relations'">关系</button>
+          <button class="tab" :class="{ active: nodeTab === 'behaviors' }" @click="nodeTab = 'behaviors'">行为</button>
+          <button class="tab" :class="{ active: nodeTab === 'rules' }" @click="nodeTab = 'rules'">规则</button>
+          <button class="tab" :class="{ active: nodeTab === 'states' }" @click="nodeTab = 'states'">状态</button>
+          <button class="tab" :class="{ active: nodeTab === 'objects' }" @click="nodeTab = 'objects'">对象</button>
+          <button class="tab" :class="{ active: nodeTab === 'relations' }" @click="nodeTab = 'relations'">关系</button>
         </div>
         <input class="search" v-model="kw" placeholder="搜索名称/类型…" />
 
         <div class="list">
-          <template v-if="listMode === 'entities'">
+          <template v-if="nodeTab !== 'relations'">
             <div
               v-for="n in filteredEntities"
               :key="n.id"
@@ -62,7 +65,9 @@
         </div>
 
         <div class="panel-footer">
-          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="openCreateEntity">新建实体</button>
+          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntity">
+            {{ createBtnText }}
+          </button>
           <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
             {{ linkMode ? '退出创建关系' : '创建关系' }}
           </button>
@@ -175,7 +180,7 @@ const toastErr = ref("");
 
 const entities = ref([]);
 const relations = ref([]);
-const listMode = ref("entities");
+const nodeTab = ref("behaviors"); // behaviors | rules | states | objects | relations
 const kw = ref("");
 const query = ref({ root_id: "", depth: 3 });
 
@@ -212,8 +217,16 @@ function safeParseJson(text) {
 
 const filteredEntities = computed(() => {
   const k = kw.value.trim();
-  if (!k) return entities.value;
-  return entities.value.filter((n) => (n.name || "").includes(k) || (n.label || "").includes(k) || (n.id || "").includes(k));
+  const base = entities.value.filter((n) => {
+    const label = (n.label || "Concept").toString();
+    if (nodeTab.value === "behaviors") return label === "Behavior";
+    if (nodeTab.value === "rules") return label === "Rule";
+    if (nodeTab.value === "states") return label === "State";
+    if (nodeTab.value === "objects") return !["Behavior", "Rule", "State"].includes(label);
+    return true;
+  });
+  if (!k) return base;
+  return base.filter((n) => (n.name || "").includes(k) || (n.label || "").includes(k) || (n.id || "").includes(k));
 });
 const filteredRelations = computed(() => {
   const k = kw.value.trim();
@@ -267,6 +280,18 @@ function buildCy(nodes, edges) {
         {
           selector: 'node[label = "Rule"]',
           style: { "background-color": "#f59e0b" },
+        },
+        {
+          selector: 'node[label = "Behavior"]',
+          style: { "background-color": "#22c55e" },
+        },
+        {
+          selector: 'node[label = "State"]',
+          style: { "background-color": "#38bdf8" },
+        },
+        {
+          selector: 'node[label = "Evidence"], node[label = "Artifact"]',
+          style: { "background-color": "#a855f7" },
         },
         {
           selector: "edge",
@@ -476,7 +501,15 @@ async function cancelDraft() {
 }
 
 async function openCreateEntity() {
-  const name = prompt("请输入实体名称：");
+  const label =
+    nodeTab.value === "behaviors"
+      ? "Behavior"
+      : nodeTab.value === "rules"
+        ? "Rule"
+        : nodeTab.value === "states"
+          ? "State"
+          : "Concept";
+  const name = prompt(`请输入${label === "Concept" ? "对象" : label === "Behavior" ? "行为" : label === "Rule" ? "规则" : "状态"}名称：`);
   if (!name) return;
   loading.value = true;
   try {
@@ -484,10 +517,18 @@ async function openCreateEntity() {
       props.scope === "draft"
         ? `${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/entities`
         : `${props.apiBase}/ontology/entities`;
+    const propsTemplate =
+      label === "Behavior"
+        ? { source: "manual", preconditions: [], effects: [], inputs: [], outputs: [], version: "v1" }
+        : label === "Rule"
+          ? { source: "manual", trigger: "", action: "", approval_required: false, required_evidence: [] }
+          : label === "State"
+            ? { source: "manual", domain: "RiskState", meaning: "" }
+            : { source: "manual", desc: "" };
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, label: "Concept", props: { source: "manual" } }),
+      body: JSON.stringify({ name, label, props: propsTemplate }),
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -499,6 +540,14 @@ async function openCreateEntity() {
     loading.value = false;
   }
 }
+
+const createBtnText = computed(() => {
+  if (nodeTab.value === "behaviors") return "新建行为";
+  if (nodeTab.value === "rules") return "新建规则";
+  if (nodeTab.value === "states") return "新建状态";
+  if (nodeTab.value === "objects") return "新建对象";
+  return "新建";
+});
 
 async function createLink() {
   if (!linkDraft.value.src || !linkDraft.value.dst) return;
