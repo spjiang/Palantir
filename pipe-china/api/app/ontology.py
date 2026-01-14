@@ -14,8 +14,8 @@ from .models import Entity, Relation, ImportResult
 class OntologyStore:
     """
     轻量封装 Neo4j：
-    - 实体节点：(:Concept {id, name, label, props})
-    - 关系边：  (src)-[:TYPE {id, props}]->(dst)
+    - 实体节点：(:Concept {id, name, label, props_json})
+    - 关系边：  (src)-[:REL {id, type, props_json}]->(dst)
     """
 
     def __init__(self, uri: str, user: str, password: str):
@@ -34,30 +34,34 @@ class OntologyStore:
 
     def upsert_entity(self, name: str, label: str, props: dict) -> Entity:
         node_id = f"ent-{uuid.uuid4().hex[:8]}"
+        props_json = json.dumps(props or {}, ensure_ascii=False)
         query = """
         MERGE (n:Concept {name:$name})
         SET n.id = coalesce(n.id, $id),
             n.label = $label,
-            n.props = coalesce(n.props, {}) + $props
-        RETURN n.id AS id, n.label AS label, n.name AS name, n.props AS props
+            n.props_json = $props_json
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
         """
         with self.driver.session() as session:
-            rec = session.run(query, name=name, id=node_id, label=label, props=props or {}).single()
-        return Entity(**rec.data())
+            rec = session.run(query, name=name, id=node_id, label=label, props_json=props_json).single()
+        data = rec.data()
+        return Entity(id=data["id"], label=data.get("label", "Concept"), name=data["name"], props=self._loads_props(data.get("props_json")))
 
     def create_relation(self, src: str, dst: str, rel_type: str, props: dict) -> Relation:
         rel_id = f"rel-{uuid.uuid4().hex[:8]}"
+        props_json = json.dumps(props or {}, ensure_ascii=False)
         query = """
         MATCH (s {id:$src})
         MATCH (d {id:$dst})
         MERGE (s)-[r:REL {type:$type}]->(d)
         SET r.id = coalesce(r.id, $id),
-            r.props = coalesce(r.props, {}) + $props
-        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props AS props
+            r.props_json = $props_json
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
         """
         with self.driver.session() as session:
-            rec = session.run(query, src=src, dst=dst, type=rel_type, id=rel_id, props=props or {}).single()
-        return Relation(**rec.data())
+            rec = session.run(query, src=src, dst=dst, type=rel_type, id=rel_id, props_json=props_json).single()
+        data = rec.data()
+        return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
 
     def query_graph(self, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
         if root_id:
@@ -84,7 +88,12 @@ class OntologyStore:
         with self.driver.session() as session:
             for rec in session.run(query, **params):
                 for n in rec["ns"]:
-                    nodes[n["id"]] = Entity(id=n["id"], label=n.get("label", "Concept"), name=n["name"], props=n.get("props", {}))
+                    nodes[n["id"]] = Entity(
+                        id=n["id"],
+                        label=n.get("label", "Concept"),
+                        name=n["name"],
+                        props=self._loads_props(n.get("props_json")),
+                    )
                 for r in rec["rs"]:
                     rid = r.get("id") or f"rel-{uuid.uuid4().hex[:8]}"
                     edges[rid] = Relation(
@@ -92,7 +101,7 @@ class OntologyStore:
                         type=r.get("type", "RELATED_TO"),
                         src=r.start_node["id"],
                         dst=r.end_node["id"],
-                        props=r.get("props", {}),
+                        props=self._loads_props(r.get("props_json")),
                     )
         return list(nodes.values()), list(edges.values())
 
@@ -100,11 +109,22 @@ class OntologyStore:
         query = """
         MATCH (n:Concept)
         WHERE toLower(n.name) CONTAINS toLower($kw)
-        RETURN n.id AS id, n.label AS label, n.name AS name, n.props AS props
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
         LIMIT $limit
         """
         with self.driver.session() as session:
-            return [Entity(**rec.data()) for rec in session.run(query, kw=keyword, limit=limit)]
+            items: list[Entity] = []
+            for rec in session.run(query, kw=keyword, limit=limit):
+                data = rec.data()
+                items.append(
+                    Entity(
+                        id=data["id"],
+                        label=data.get("label", "Concept"),
+                        name=data["name"],
+                        props=self._loads_props(data.get("props_json")),
+                    )
+                )
+            return items
 
     # ---------- 文本解析为简单本体 ----------
 
@@ -206,6 +226,17 @@ class OntologyStore:
             fallback_used=False,
             message="DeepSeek 抽取完成并已写入图数据库",
         )
+
+    @staticmethod
+    def _loads_props(v) -> dict:
+        if not v:
+            return {}
+        if isinstance(v, dict):
+            return v
+        try:
+            return json.loads(v)
+        except Exception:
+            return {}
 
     async def _deepseek_extract(self, text: str, *, api_key: str, base_url: str, model: str) -> dict:
         prompt = (
