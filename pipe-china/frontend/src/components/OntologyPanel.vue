@@ -1144,10 +1144,20 @@ function closeInfoModal() {
   display: flex;
   gap: 10px;
   align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
 }
 .stream-hint {
   font-size: 12px;
-  color: rgba(226, 232, 240, 0.65);
+  color: #000;
+}
+.stream-collapsed .btn.secondary {
+  color: #000;
+  border-color: rgba(15, 23, 42, 0.18);
+  background: rgba(15, 23, 42, 0.06);
 }
 .btn.mini {
   padding: 6px 10px;
@@ -1222,8 +1232,9 @@ function closeInfoModal() {
   display: grid;
   grid-template-columns: 1fr 440px;
   gap: 12px;
-  height: min(720px, calc(100vh - 280px));
-  min-height: 520px;
+  /* 更高的工作区：让画布与右侧列表/编辑区都能显示更多内容 */
+  height: clamp(680px, calc(100vh - 200px), 980px);
+  min-height: 680px;
 }
 .sidebar {
   display: flex;
@@ -1401,7 +1412,7 @@ function closeInfoModal() {
 }
 .graph {
   flex: 1;
-  min-height: 440px;
+  min-height: 600px;
   position: relative;
   z-index: 1;
   background:
