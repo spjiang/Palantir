@@ -224,6 +224,21 @@ def delete_draft(draft_id: str):
         raise HTTPException(500, f"delete draft failed: {e}")
 
 
+@app.post("/ontology/admin/purge", response_model=dict)
+def purge_all_graph(confirm: str = ""):
+    """
+    危险：一键清空图数据库（正式 + 临时）。
+    需要显式传入 confirm=YES 才执行，避免误触。
+    """
+    if confirm != "YES":
+        raise HTTPException(400, "missing confirm=YES")
+    try:
+        store.purge_all()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, f"purge failed: {e}")
+
+
 @app.post("/ontology/entities", response_model=Entity)
 def create_entity(payload: EntityCreate):
     try:

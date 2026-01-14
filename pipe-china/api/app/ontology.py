@@ -204,6 +204,14 @@ class OntologyStore:
         with self.driver.session() as session:
             session.run(query, draft_id=draft_id, id=rel_id).consume()
 
+    def purge_all(self) -> None:
+        """
+        危险操作：清空整个图数据库（包含正式图谱 Concept/REL 与临时图谱 DraftConcept/DREL）。
+        """
+        query = "MATCH (n) DETACH DELETE n"
+        with self.driver.session() as session:
+            session.run(query).consume()
+
     def query_draft_graph(self, draft_id: str, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
         depth = max(1, min(int(depth), 4))
         if root_id:

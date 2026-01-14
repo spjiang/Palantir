@@ -11,6 +11,7 @@
         <button class="btn secondary" :disabled="loading" @click="refreshAll">刷新</button>
         <button class="btn" :disabled="!draft || loading" @click="commitDraft">确认入库</button>
         <button class="btn secondary" :disabled="!draft || loading" @click="cancelDraft">取消草稿</button>
+        <button class="btn danger" :disabled="loading" @click="purgeAll">一键清空图数据库</button>
       </div>
     </div>
 
@@ -289,6 +290,26 @@ function cancelDraft() {
   importResult.value = null;
   clearSelection();
   refreshAll();
+}
+
+async function purgeAll() {
+  const ok1 = confirm("危险操作：将清空【正式图谱 + 草稿图谱】的所有节点与关系，且不可恢复。确认继续？");
+  if (!ok1) return;
+  const ok2 = confirm("再次确认：你确定要清空整个图数据库吗？（不可恢复）");
+  if (!ok2) return;
+  loading.value = true;
+  try {
+    const res = await fetch(`${props.apiBase}/ontology/admin/purge?confirm=YES`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+    draft.value = null;
+    importResult.value = { created_nodes: 0, created_edges: 0, message: "已清空图数据库" };
+    clearSelection();
+    await refreshAll();
+  } catch (e) {
+    toastErr(`清空失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
 }
 
 function buildCy(nodes, edges) {
