@@ -23,6 +23,16 @@
 
     <div v-if="toastOk" class="toast ok">{{ toastOk }}</div>
     <div v-if="toastErr" class="toast err">{{ toastErr }}</div>
+    <div v-if="streamPanel.open" class="stream">
+      <div class="stream-head">
+        <div class="stream-title">实时抽取（DeepSeek 流式）</div>
+        <div class="stream-stage">{{ streamPanel.stage }}</div>
+        <button class="btn secondary mini" @click="streamPanel.open = false">收起</button>
+      </div>
+      <div class="stream-body mono">
+        {{ streamPanel.text || "（等待模型返回…）" }}<span v-if="loading" class="cursor">▍</span>
+      </div>
+    </div>
 
     <div class="body">
       <!-- graph (main) -->
@@ -222,6 +232,7 @@ const file = ref(null);
 const loading = ref(false);
 const toastOk = ref("");
 const toastErr = ref("");
+const streamPanel = ref({ open: false, stage: "", text: "", done: false });
 
 const entities = ref([]);
 const relations = ref([]);
@@ -497,11 +508,48 @@ async function extract() {
   const fd = new FormData();
   fd.append("file", file.value);
   try {
-    const res = await fetch(`${props.apiBase}/ontology/extract`, { method: "POST", body: fd });
+    // 高级感：流式实时展示 DeepSeek 抽取过程（SSE over fetch stream）
+    streamPanel.value = { open: true, stage: "调用中", text: "", done: false };
+    const res = await fetch(`${props.apiBase}/ontology/extract/stream`, { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    emit("draft-created", data.draft_id);
-    toastSuccess(`草稿已生成：节点 ${data.nodes.length}，关系 ${data.edges.length}。`);
+    if (!res.body) throw new Error("浏览器不支持流式读取");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      // SSE 分段：以 \n\n 结束
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const lines = chunk.split("\n").map((x) => x.trimEnd());
+        let ev = "message";
+        let dataLine = "";
+        for (const ln of lines) {
+          if (ln.startsWith("event:")) ev = ln.slice(6).trim();
+          if (ln.startsWith("data:")) dataLine += ln.slice(5).trim();
+        }
+        if (!dataLine) continue;
+        const payload = JSON.parse(dataLine);
+        if (ev === "status") {
+          streamPanel.value.stage = payload.message || payload.stage || "调用中";
+        } else if (ev === "token") {
+          streamPanel.value.text += payload.text || "";
+        } else if (ev === "done") {
+          streamPanel.value.stage = "完成";
+          streamPanel.value.done = true;
+          emit("draft-created", payload.draft_id);
+          toastSuccess(`草稿已生成：节点 ${(payload.nodes || []).length}，关系 ${(payload.edges || []).length}。`);
+          // 拉取草稿数据刷新画布
+          await refresh();
+        } else if (ev === "error") {
+          throw new Error(payload.message || JSON.stringify(payload));
+        }
+      }
+    }
   } catch (e) {
     toastError(`抽取失败: ${e}`);
   } finally {
@@ -867,6 +915,52 @@ async function purgeAllDo() {
   border-color: rgba(239, 68, 68, 0.5);
   color: #ffffff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+.stream {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.55);
+  overflow: hidden;
+}
+.stream-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  color: rgba(226, 232, 240, 0.9);
+}
+.stream-title {
+  font-weight: 900;
+}
+.stream-stage {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+  flex: 1;
+  text-align: center;
+}
+.stream-body {
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  color: rgba(226, 232, 240, 0.85);
+}
+.btn.mini {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.cursor {
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink {
+  to {
+    opacity: 0;
+  }
 }
 
 .body {

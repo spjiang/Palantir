@@ -478,6 +478,60 @@ class OntologyStore:
         - 为每条关系生成稳定 id：rel-<sha1(src|type|dst)>
         """
         payload = await self._deepseek_extract(text, api_key=api_key, base_url=base_url, model=model)
+        return self._payload_to_draft_graph(payload)
+
+    def extract_draft_from_deepseek_stream(
+        self,
+        text: str,
+        *,
+        api_key: str,
+        base_url: str = "https://api.deepseek.com",
+        model: str = "deepseek-chat",
+    ):
+        """
+        DeepSeek 流式抽取：逐步 yield token，最后 yield done({draft_id,nodes,edges})。
+        注意：此方法是同步 generator（OpenAI SDK stream 是阻塞的），由 FastAPI StreamingResponse 驱动。
+        """
+        prompt = self._render_prompt_template(template_name="deepseek_extract.md", context={"BUSINESS_TEXT": text})
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/"))
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a senior ontology and behavior modeling assistant for oil & gas pipeline operations."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                stream=True,
+            )
+        except Exception as e:
+            raise RuntimeError(f"DeepSeek(OpenAI SDK) stream request failed: {repr(e)}") from e
+
+        content = ""
+        for event in stream:
+            try:
+                delta = getattr(event.choices[0].delta, "content", None)  # type: ignore[attr-defined]
+            except Exception:
+                delta = None
+            if delta:
+                content += delta
+                yield {"event": "token", "data": delta}
+
+        # 兼容模型偶尔包 ```json ... ```
+        raw = content.strip()
+        raw = re.sub(r"^```json\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"^```\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"DeepSeek returned non-JSON content (head): {raw[:800]}") from e
+
+        draft_id, nodes, edges = self._payload_to_draft_graph(payload)
+        yield {"event": "done", "data": {"draft_id": draft_id, "nodes": [n.model_dump() for n in nodes], "edges": [e.model_dump() for e in edges]}}
+
+    def _payload_to_draft_graph(self, payload: dict) -> tuple[str, list[Entity], list[Relation]]:
         draft_id = f"draft-{uuid.uuid4().hex[:10]}"
 
         def ent_id(name: str, label: str = "Concept") -> str:

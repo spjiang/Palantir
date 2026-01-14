@@ -6,8 +6,11 @@ import traceback
 import uuid
 from typing import Any
 
+import json
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from .models import (
     Entity,
@@ -90,6 +93,60 @@ async def extract_ontology(file: UploadFile = File(...)):
                 "hint": "请查看服务端日志：docker logs pipe-china-api --tail=200",
             },
         )
+
+
+@app.post("/ontology/extract/stream")
+async def extract_ontology_stream(file: UploadFile = File(...)):
+    """
+    流式抽取：实时返回 DeepSeek 输出 token（SSE），最终发送 done({draft_id,nodes,edges})。
+    前端用于“高级感”的实时展示。
+    """
+    text = (await file.read()).decode("utf-8", errors="ignore")
+    if not DEEPSEEK_API_KEY:
+        raise HTTPException(400, "DEEPSEEK_API_KEY is empty. Please set it and retry.")
+
+    def sse(event: str, data) -> bytes:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+    def gen():
+        yield sse("status", {"stage": "start", "message": "开始调用 DeepSeek（流式）…"})
+        try:
+            for item in store.extract_draft_from_deepseek_stream(
+                text,
+                api_key=DEEPSEEK_API_KEY,
+                base_url=DEEPSEEK_BASE_URL,
+                model=DEEPSEEK_MODEL,
+            ):
+                if item.get("event") == "token":
+                    yield sse("token", {"text": item.get("data", "")})
+                elif item.get("event") == "done":
+                    data = item.get("data") or {}
+                    # 写入“临时图谱”（与正式图谱隔离），供该文档的图查询/编辑使用
+                    draft_id = data.get("draft_id")
+                    nodes = data.get("nodes") or []
+                    edges = data.get("edges") or []
+                    # 这里 nodes/edges 已是 dict；用 DraftExtractResponse 的结构即可
+                    store.save_draft(
+                        draft_id,
+                        [Entity(**n) for n in nodes],
+                        [Relation(**e) for e in edges],
+                    )
+                    yield sse("done", {"draft_id": draft_id, "nodes": nodes, "edges": edges})
+        except Exception as e:
+            error_id = f"err-{uuid.uuid4().hex[:10]}"
+            logger.error("extract stream failed (error_id=%s): %s", error_id, repr(e))
+            logger.error("traceback (error_id=%s):\n%s", error_id, traceback.format_exc())
+            yield sse(
+                "error",
+                {
+                    "error_id": error_id,
+                    "error_type": type(e).__name__,
+                    "message": str(e).strip() or repr(e),
+                    "hint": "请查看服务端日志：docker logs pipe-china-api --tail=200",
+                },
+            )
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # 兼容旧前端：保留 /ontology/import，但语义改为 extract（不落库）
