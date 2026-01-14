@@ -85,6 +85,13 @@
           <div class="toolbtns">
             <button class="btn secondary" :disabled="!cy" @click="relayout">重新布局</button>
             <button class="btn secondary" :disabled="!cy" @click="fit">适配视图</button>
+            <div class="legend" title="颜色图例">
+              <span class="lg-item"><i class="dot behavior"></i>行为</span>
+              <span class="lg-item"><i class="dot rule"></i>规则</span>
+              <span class="lg-item"><i class="dot state"></i>状态</span>
+              <span class="lg-item"><i class="dot evidence"></i>证据/产物</span>
+              <span class="lg-item"><i class="dot concept"></i>对象</span>
+            </div>
           </div>
         </div>
 
@@ -875,6 +882,45 @@ watch(selected, () => highlightSelected());
 .toolbtns {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+.legend {
+  display: inline-flex;
+  gap: 10px;
+  padding-left: 6px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.lg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.dot.behavior {
+  background: #22c55e;
+}
+.dot.rule {
+  background: #f59e0b;
+}
+.dot.state {
+  background: #38bdf8;
+}
+.dot.evidence {
+  background: #a855f7;
+}
+.dot.concept {
+  background: #6366f1;
 }
 .hint {
   padding: 8px 12px;
