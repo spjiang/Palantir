@@ -486,6 +486,8 @@ class OntologyStore:
 
         nodes: dict[str, Entity] = {}
         edges: dict[str, Relation] = {}
+        # 以“名称”为主键的索引，用于避免同名对象在不同 label 分支里被重复创建
+        name_to_id: dict[str, str] = {}
 
         # entities（对象/状态/行为/证据等都作为实体节点承载，label 决定类型）
         for ent in payload.get("entities", []):
@@ -495,15 +497,23 @@ class OntologyStore:
             label = (ent.get("label") or "Concept").strip() or "Concept"
             props = ent.get("props") or {}
             props = {**props, "source": "deepseek"}
-            eid = ent_id(name, label)
+            # 若同名已存在，优先复用，避免重复节点
+            key_name = name
+            if key_name in name_to_id:
+                eid = name_to_id[key_name]
+            else:
+                eid = ent_id(name, label)
+                name_to_id[key_name] = eid
             nodes[eid] = Entity(id=eid, name=name, label=label, props=props)
 
         # relations（若实体缺失则补 Concept）
         def ensure_node(nm: str, label: str = "Concept") -> str:
             nm = nm.strip()
+            if nm in name_to_id:
+                return name_to_id[nm]
             eid = ent_id(nm, label)
-            if eid not in nodes:
-                nodes[eid] = Entity(id=eid, name=nm, label=label, props={"source": "deepseek"})
+            nodes[eid] = Entity(id=eid, name=nm, label=label, props={"source": "deepseek"})
+            name_to_id[nm] = eid
             return eid
 
         for rel in payload.get("relations", []):
@@ -524,7 +534,7 @@ class OntologyStore:
             rname = (rule.get("name") or "").strip()
             if not rname:
                 continue
-            rid_node = ent_id(rname, "Rule")
+            rid_node = ensure_node(rname, "Rule")
             rprops = {
                 "source": "deepseek",
                 "trigger": rule.get("trigger"),
@@ -544,14 +554,14 @@ class OntologyStore:
                     continue
                 oid = ensure_node(nm)
                 rrel_id = f"rel-{hashlib.sha1(f'{rid_node}|INVOLVES|{oid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="INVOLVES", src=rid_node, dst=oid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="涉及", src=rid_node, dst=oid, props={"source": "deepseek"})
 
             # rule -> behavior（若提供）
             bname = (rule.get("behavior") or rule.get("governs_behavior") or "").strip()
             if bname:
                 bid = ensure_node(bname, "Behavior")
                 rrel_id = f"rel-{hashlib.sha1(f'{rid_node}|GOVERNS|{bid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="GOVERNS", src=rid_node, dst=bid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="约束", src=rid_node, dst=bid, props={"source": "deepseek"})
 
             # rule -> evidence（若提供 required_evidence）
             for ev in rule.get("required_evidence") or []:
@@ -560,7 +570,7 @@ class OntologyStore:
                     continue
                 evid = ensure_node(evn, "Evidence")
                 rrel_id = f"rel-{hashlib.sha1(f'{rid_node}|REQUIRES_EVIDENCE|{evid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="REQUIRES_EVIDENCE", src=rid_node, dst=evid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="需要证据", src=rid_node, dst=evid, props={"source": "deepseek"})
 
         # behaviors：行为作为一级对象，显式表达“条件→行为→状态变化→新数据”
         for beh in payload.get("behaviors", []):
@@ -591,7 +601,7 @@ class OntologyStore:
                     continue
                 oid = ensure_node(nm, "Concept")
                 rrel_id = f"rel-{hashlib.sha1(f'{bid}|AFFECTS|{oid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="AFFECTS", src=bid, dst=oid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="作用于", src=bid, dst=oid, props={"source": "deepseek"})
 
             # state transition
             st_from = (beh.get("state_from") or beh.get("from_state") or "").strip()
@@ -599,11 +609,11 @@ class OntologyStore:
             if st_from:
                 sid = ensure_node(st_from, "State")
                 rrel_id = f"rel-{hashlib.sha1(f'{bid}|FROM_STATE|{sid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="FROM_STATE", src=bid, dst=sid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="从状态", src=bid, dst=sid, props={"source": "deepseek"})
             if st_to:
                 tid = ensure_node(st_to, "State")
                 rrel_id = f"rel-{hashlib.sha1(f'{bid}|TO_STATE|{tid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="TO_STATE", src=bid, dst=tid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="到状态", src=bid, dst=tid, props={"source": "deepseek"})
 
             # produces artifacts / evidence / task
             for out in beh.get("produces") or beh.get("artifacts") or []:
@@ -612,7 +622,7 @@ class OntologyStore:
                     continue
                 aid = ensure_node(onm, "Artifact")
                 rrel_id = f"rel-{hashlib.sha1(f'{bid}|PRODUCES|{aid}'.encode('utf-8')).hexdigest()[:12]}"
-                edges[rrel_id] = Relation(id=rrel_id, type="PRODUCES", src=bid, dst=aid, props={"source": "deepseek"})
+                edges[rrel_id] = Relation(id=rrel_id, type="产生", src=bid, dst=aid, props={"source": "deepseek"})
 
         # state_transitions：显式状态迁移表（可选）
         for st in payload.get("state_transitions", []):
@@ -626,7 +636,7 @@ class OntologyStore:
             bid = ensure_node(via, "Behavior")
             fid = ensure_node(frm, "State")
             tid = ensure_node(to, "State")
-            for t, dst in [("APPLIES_TO", oid), ("FROM_STATE", fid), ("TO_STATE", tid)]:
+            for t, dst in [("适用对象", oid), ("从状态", fid), ("到状态", tid)]:
                 rrel_id = f"rel-{hashlib.sha1(f'{bid}|{t}|{dst}'.encode('utf-8')).hexdigest()[:12]}"
                 edges[rrel_id] = Relation(id=rrel_id, type=t, src=bid, dst=dst, props={"source": "deepseek"})
 
@@ -659,6 +669,8 @@ class OntologyStore:
         prompt = (
             "你是【油气管网运维】领域的本体论/行为建模抽取助手。\n"
             "核心要求：一定要以【行为建模】为中心，把业务方案里的“条件→行为→状态变化→新数据/证据”显性化。\n"
+            "语言要求：能用中文的地方都用中文（实体 name、关系 type、规则 trigger/action、证据名称等尽量用中文）。\n"
+            "为保证产品识别与配色，label 使用英文枚举（Behavior/Rule/State/Evidence/Artifact/...），但 name 必须尽量中文。\n"
             "只输出严格 JSON（不要 Markdown，不要解释文字）。\n"
             "\n"
             "你必须输出：\n"
