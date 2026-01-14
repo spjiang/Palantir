@@ -229,11 +229,22 @@ class OntologyStore:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
         }
-        async with httpx.AsyncClient(timeout=40.0) as client:
-            r = await client.post(url, headers=headers, json=body)
-            r.raise_for_status()
-            data = r.json()
-            content = data["choices"][0]["message"]["content"]
+        try:
+            async with httpx.AsyncClient(timeout=40.0) as client:
+                r = await client.post(url, headers=headers, json=body)
+                r.raise_for_status()
+                data = r.json()
+                content = data["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            # 尽量把 DeepSeek 的返回体带出来（避免只剩一个空异常）
+            resp_text = ""
+            try:
+                resp_text = e.response.text
+            except Exception:
+                resp_text = ""
+            raise RuntimeError(f"DeepSeek HTTP {e.response.status_code}: {resp_text[:800]}") from e
+        except Exception as e:
+            raise RuntimeError(f"DeepSeek request failed: {repr(e)}") from e
 
         # 兼容模型偶尔包 ```json ... ```
         content = content.strip()
@@ -241,6 +252,9 @@ class OntologyStore:
         content = re.sub(r"^```\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
 
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"DeepSeek returned non-JSON content (head): {content[:800]}") from e
 
     # （保留 _deepseek_extract 的轻量内容清洗；不再需要词法抽取辅助函数）

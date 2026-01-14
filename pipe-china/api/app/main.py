@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 import os
+import traceback
+import uuid
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -27,6 +30,9 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").s
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
 
 store = OntologyStore(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+
+logger = logging.getLogger("pipe_china.api")
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 app = FastAPI(title="Pipe-China Ontology/行为建模 API", version="0.1.0")
 app.add_middleware(
@@ -63,7 +69,21 @@ async def import_doc(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"import failed: {e}")
+        error_id = f"err-{uuid.uuid4().hex[:10]}"
+        # 在容器日志中打印完整堆栈，便于定位
+        logger.error("import failed (error_id=%s): %s", error_id, repr(e))
+        logger.error("traceback (error_id=%s):\n%s", error_id, traceback.format_exc())
+
+        msg = str(e).strip() or repr(e)
+        raise HTTPException(
+            500,
+            detail={
+                "error_id": error_id,
+                "error_type": type(e).__name__,
+                "message": msg,
+                "hint": "请查看服务端日志：docker logs pipe-china-api --tail=200",
+            },
+        )
 
 
 @app.post("/ontology/entities", response_model=Entity)
