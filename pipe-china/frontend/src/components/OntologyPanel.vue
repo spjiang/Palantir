@@ -238,8 +238,8 @@ function highlightSelected() {
 
 function buildCy(nodes, edges) {
   const elements = [
-    ...nodes.map((n) => ({ data: { id: n.id, name: n.name, label: n.label } })),
-    ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type } })),
+    ...nodes.map((n) => ({ data: { id: n.id, name: n.name, label: n.label, props: n.props || {} } })),
+    ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type, props: e.props || {} } })),
   ];
 
   if (!cy.value) {
@@ -327,14 +327,30 @@ function fit() {
 }
 
 function selectNodeById(id) {
-  const n = entities.value.find((x) => x.id === id);
+  let n = entities.value.find((x) => x.id === id);
+  // 兜底：如果左侧列表没加载到该节点（例如 list limit / 只查询子图），从画布节点取数据
+  if (!n && cy.value) {
+    const ele = cy.value.getElementById(id);
+    if (ele && ele.isNode && ele.isNode()) {
+      const d = ele.data() || {};
+      n = { id, name: d.name || "", label: d.label || "Concept", props: d.props || {} };
+    }
+  }
   if (!n) return;
   selected.value = { kind: "node", id };
   editNode.value = { id, name: n.name || "", label: n.label || "Concept", propsText: JSON.stringify(n.props || {}, null, 2) };
   highlightSelected();
 }
 function selectEdgeById(id) {
-  const e = relations.value.find((x) => x.id === id);
+  let e = relations.value.find((x) => x.id === id);
+  // 兜底：从画布关系取数据
+  if (!e && cy.value) {
+    const ele = cy.value.getElementById(id);
+    if (ele && ele.isEdge && ele.isEdge()) {
+      const d = ele.data() || {};
+      e = { id, type: d.type || "RELATED_TO", src: d.source, dst: d.target, props: d.props || {} };
+    }
+  }
   if (!e) return;
   selected.value = { kind: "edge", id };
   editEdge.value = { id, type: e.type || "RELATED_TO", src: e.src, dst: e.dst, propsText: JSON.stringify(e.props || {}, null, 2) };
