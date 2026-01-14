@@ -5,8 +5,8 @@ import re
 import uuid
 from typing import List, Tuple
 
-import httpx
 from neo4j import GraphDatabase, Driver
+from openai import OpenAI
 
 from .models import Entity, Relation, ImportResult
 
@@ -208,8 +208,6 @@ class OntologyStore:
         )
 
     async def _deepseek_extract(self, text: str, *, api_key: str, base_url: str, model: str) -> dict:
-        url = f"{base_url.rstrip('/')}/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}"}
         prompt = (
             "你是城市管网运维领域的本体抽取助手。"
             "请从给定的【业务方案】中抽取：entities（实体）、relations（关系）、rules（规则）。\n"
@@ -224,27 +222,22 @@ class OntologyStore:
             "注意：实体名请尽量使用业务原词（如：泵站、管段、阀门、雨量站、报警事件、任务、事件/工单）。\n\n"
             f"【业务方案】\n{text}\n"
         )
-        body = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
-        }
         try:
-            async with httpx.AsyncClient(timeout=40.0) as client:
-                r = await client.post(url, headers=headers, json=body)
-                r.raise_for_status()
-                data = r.json()
-                content = data["choices"][0]["message"]["content"]
-        except httpx.HTTPStatusError as e:
-            # 尽量把 DeepSeek 的返回体带出来（避免只剩一个空异常）
-            resp_text = ""
-            try:
-                resp_text = e.response.text
-            except Exception:
-                resp_text = ""
-            raise RuntimeError(f"DeepSeek HTTP {e.response.status_code}: {resp_text[:800]}") from e
+            # 对齐官方示例：OpenAI SDK + base_url 指向 DeepSeek
+            client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/"))
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                stream=False,
+            )
+            content = resp.choices[0].message.content or ""
         except Exception as e:
-            raise RuntimeError(f"DeepSeek request failed: {repr(e)}") from e
+            # openai SDK 会抛出不同异常类型，这里统一包装，message 留给上层输出
+            raise RuntimeError(f"DeepSeek(OpenAI SDK) request failed: {repr(e)}") from e
 
         # 兼容模型偶尔包 ```json ... ```
         content = content.strip()
