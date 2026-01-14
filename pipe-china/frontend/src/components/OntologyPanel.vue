@@ -366,6 +366,16 @@ const editEdge = ref({ id: "", type: "RELATED_TO", src: "", dst: "", propsText: 
 const linkMode = ref(false);
 const linkDraft = ref({ src: "", dst: "", type: "RELATED_TO", propsText: "{}" });
 
+function normLabel(label) {
+  const l = (label || "Concept").toString().trim();
+  if (l === "行为") return "Behavior";
+  if (l === "规则") return "Rule";
+  if (l === "状态") return "State";
+  if (l === "证据") return "Evidence";
+  if (l === "产物") return "Artifact";
+  return l || "Concept";
+}
+
 function toastError(msg) {
   toastErr.value = msg;
   setTimeout(() => {
@@ -390,7 +400,7 @@ function safeParseJson(text) {
 const filteredEntities = computed(() => {
   const k = kw.value.trim();
   const base = entities.value.filter((n) => {
-    const label = (n.label || "Concept").toString();
+    const label = normLabel(n.label);
     if (nodeTab.value === "behaviors") return label === "Behavior";
     if (nodeTab.value === "rules") return label === "Rule";
     if (nodeTab.value === "states") return label === "State";
@@ -454,7 +464,15 @@ function buildCy(nodes, edges) {
           style: { "background-color": "#f59e0b" },
         },
         {
+          selector: 'node[label = "规则"]',
+          style: { "background-color": "#f59e0b" },
+        },
+        {
           selector: 'node[label = "Behavior"]',
+          style: { "background-color": "#22c55e" },
+        },
+        {
+          selector: 'node[label = "行为"]',
           style: { "background-color": "#22c55e" },
         },
         {
@@ -462,7 +480,15 @@ function buildCy(nodes, edges) {
           style: { "background-color": "#38bdf8" },
         },
         {
+          selector: 'node[label = "状态"]',
+          style: { "background-color": "#38bdf8" },
+        },
+        {
           selector: 'node[label = "Evidence"], node[label = "Artifact"]',
+          style: { "background-color": "#a855f7" },
+        },
+        {
+          selector: 'node[label = "证据"], node[label = "产物"]',
           style: { "background-color": "#a855f7" },
         },
         {
@@ -534,6 +560,12 @@ function selectNodeById(id) {
     }
   }
   if (!n) return;
+  // 选中后自动切换到对应 Tab，让列表“能看到”
+  const nl = normLabel(n.label);
+  if (nl === "Behavior") nodeTab.value = "behaviors";
+  else if (nl === "Rule") nodeTab.value = "rules";
+  else if (nl === "State") nodeTab.value = "states";
+  else nodeTab.value = "objects";
   selected.value = { kind: "node", id };
   editNode.value = { id, name: n.name || "", label: n.label || "Concept", propsText: JSON.stringify(n.props || {}, null, 2) };
   highlightSelected();
@@ -753,9 +785,9 @@ const createBtnText = computed(() => {
 const stats = computed(() => {
   const totalNodes = entities.value.length;
   const totalEdges = relations.value.length;
-  const behaviors = entities.value.filter((n) => (n.label || "") === "Behavior").length;
-  const rules = entities.value.filter((n) => (n.label || "") === "Rule").length;
-  const states = entities.value.filter((n) => (n.label || "") === "State").length;
+  const behaviors = entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
+  const rules = entities.value.filter((n) => normLabel(n.label) === "Rule").length;
+  const states = entities.value.filter((n) => normLabel(n.label) === "State").length;
   const objects = Math.max(0, totalNodes - behaviors - rules - states);
   return { totalNodes, totalEdges, behaviors, rules, states, objects };
 });
