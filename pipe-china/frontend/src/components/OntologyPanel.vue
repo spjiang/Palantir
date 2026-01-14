@@ -963,6 +963,59 @@ async function purgeAllDo() {
   }
 }
 
+/* ---------- Modals (产品级弹窗) ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.modal {
+  width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  padding: 14px 14px 12px;
+  color: #e2e8f0;
+}
+.modal.danger {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+.modal-title {
+  font-weight: 900;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.modal-sub {
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 12px;
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+.modal label {
+  display: block;
+  font-weight: 800;
+  margin: 10px 0 6px;
+}
+.modal input,
+.modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.35);
+  color: #e2e8f0;
+  box-sizing: border-box;
+}
+
 .body {
   display: grid;
   grid-template-columns: 1fr 440px;
