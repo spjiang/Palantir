@@ -6,7 +6,7 @@ services:
       context: ./frontend
       args:
         - NPM_REGISTRY=https://registry.npmmirror.com
-        - NODE_IMAGE=registry.cn-hangzhou.aliyuncs.com/library/node:18.20.4-alpine3.19
+        - NODE_IMAGE=docker.m.daocloud.io/library/node:18.20.4-alpine3.19
     container_name: pipe-china-frontend
     environment:
       - VITE_API_BASE=http://localhost:18088
@@ -21,7 +21,7 @@ services:
       args:
         - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
         - PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
-        - PYTHON_IMAGE=registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
+        - PYTHON_IMAGE=docker.m.daocloud.io/library/python:3.11-slim
     container_name: pipe-china-api
     environment:
       - NEO4J_URI=bolt://graphdb:7687
