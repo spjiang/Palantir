@@ -31,7 +31,9 @@ import PageL6 from "./components/PageL6.vue";
 // 远程部署时，浏览器里的 localhost 不是服务器；因此默认使用“当前访问域名 + 固定 API 端口”
 const apiBase = computed(() => {
   const fromEnv = import.meta.env.VITE_API_BASE;
-  if (fromEnv && String(fromEnv).trim()) return String(fromEnv).trim();
+  const envVal = fromEnv ? String(fromEnv).trim() : "";
+  // 远程访问场景：如果 env 里配置了 localhost/127.0.0.1，会导致浏览器请求打到用户本机
+  if (envVal && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(envVal)) return envVal;
   const proto = window.location.protocol;
   const host = window.location.hostname;
   return `${proto}//${host}:18088`;

@@ -8,8 +8,8 @@ services:
         - NPM_REGISTRY=https://registry.npmmirror.com
         - NODE_IMAGE=docker.m.daocloud.io/library/node:18.20.4-alpine3.19
     container_name: pipe-china-frontend
-    environment:
-      - VITE_API_BASE=http://localhost:18088
+    # 远程 VM 部署时不要用 localhost（浏览器的 localhost 指向用户本机）。
+    # 默认由前端用 window.location.hostname 自动拼出 http(s)://<VM_IP>:18088
     ports:
       - "18081:8081"
     depends_on:
