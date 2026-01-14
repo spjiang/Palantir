@@ -138,45 +138,39 @@
 
           <div v-if="!selected" class="empty">点击左侧列表或图谱中的节点/关系进行编辑。</div>
 
-          <template v-else-if="selected.kind === 'node'">
-            <div class="kv">
-              <div class="k">ID</div>
-              <div class="v mono">{{ selected.id }}</div>
-            </div>
-            <label>名称</label>
-            <input v-model="editNode.name" />
-            <label>标签</label>
-            <input v-model="editNode.label" />
-            <label>Props（JSON）</label>
-            <textarea v-model="editNode.propsText" rows="10" class="mono"></textarea>
-            <div class="btnrow">
-            <button class="btn" :disabled="loading" @click="saveNode">保存</button>
-            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteNode')">删除</button>
-            </div>
-          </template>
+        <template v-else>
+          <div class="kv">
+            <div class="k">ID</div>
+            <div class="v mono">{{ selected.id }}</div>
+          </div>
+          <div class="kv" v-if="selected.kind === 'node'">
+            <div class="k">类型</div>
+            <div class="v">{{ editNode.label }}</div>
+          </div>
+          <div class="kv" v-if="selected.kind === 'node'">
+            <div class="k">名称</div>
+            <div class="v">{{ editNode.name }}</div>
+          </div>
+          <div class="kv" v-if="selected.kind === 'edge'">
+            <div class="k">关系</div>
+            <div class="v">{{ editEdge.type }}</div>
+          </div>
+          <div class="kv" v-if="selected.kind === 'edge'">
+            <div class="k">连接</div>
+            <div class="v mono">{{ editEdge.src }} → {{ editEdge.dst }}</div>
+          </div>
 
-          <template v-else>
-            <div class="kv">
-              <div class="k">ID</div>
-              <div class="v mono">{{ selected.id }}</div>
-            </div>
-            <label>关系类型</label>
-            <input v-model="editEdge.type" />
-            <label>源节点</label>
-            <select v-model="editEdge.src">
-              <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
-            </select>
-            <label>目标节点</label>
-            <select v-model="editEdge.dst">
-              <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
-            </select>
-            <label>Props（JSON）</label>
-            <textarea v-model="editEdge.propsText" rows="10" class="mono"></textarea>
-            <div class="btnrow">
-            <button class="btn" :disabled="loading" @click="saveEdge">保存</button>
-            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteEdge')">删除</button>
-            </div>
-          </template>
+          <div class="btnrow">
+            <button class="btn" :disabled="loading" @click="openEditorModal">打开属性编辑</button>
+            <button
+              class="btn danger"
+              :disabled="loading"
+              @click="confirmDanger(selected.kind === 'node' ? 'deleteNode' : 'deleteEdge')"
+            >
+              删除
+            </button>
+          </div>
+        </template>
 
           <div v-if="linkMode && linkDraft.src && linkDraft.dst" class="card-mini">
             <div class="panel-title">创建关系</div>
@@ -269,6 +263,56 @@
         <div class="btnrow">
           <button class="btn" @click="closeInfoModal">我知道了</button>
         </div>
+      </div>
+    </div>
+
+    <!-- editor modal (large) -->
+    <div v-if="editorModal.open" class="modal-backdrop" @click.self="closeEditorModal">
+      <div class="modal large">
+        <div class="modal-title">属性编辑</div>
+        <div class="modal-sub">对节点/关系做产品级编辑：支持大文本框、完整 JSON props，并保持 ID 不变。</div>
+
+        <template v-if="selected?.kind === 'node'">
+          <div class="kv">
+            <div class="k">ID</div>
+            <div class="v mono">{{ selected.id }}</div>
+          </div>
+          <label>名称</label>
+          <input v-model="editNode.name" />
+          <label>标签</label>
+          <input v-model="editNode.label" class="mono" />
+          <label>Props（JSON）</label>
+          <textarea v-model="editNode.propsText" rows="18" class="mono"></textarea>
+          <div class="btnrow">
+            <button class="btn secondary" :disabled="loading" @click="closeEditorModal">关闭</button>
+            <button class="btn" :disabled="loading" @click="saveNodeAndClose">保存</button>
+            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteNode')">删除</button>
+          </div>
+        </template>
+
+        <template v-else-if="selected?.kind === 'edge'">
+          <div class="kv">
+            <div class="k">ID</div>
+            <div class="v mono">{{ selected.id }}</div>
+          </div>
+          <label>关系类型</label>
+          <input v-model="editEdge.type" />
+          <label>源节点</label>
+          <select v-model="editEdge.src">
+            <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }}（{{ n.label }} · {{ n.id }}）</option>
+          </select>
+          <label>目标节点</label>
+          <select v-model="editEdge.dst">
+            <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }}（{{ n.label }} · {{ n.id }}）</option>
+          </select>
+          <label>Props（JSON）</label>
+          <textarea v-model="editEdge.propsText" rows="18" class="mono"></textarea>
+          <div class="btnrow">
+            <button class="btn secondary" :disabled="loading" @click="closeEditorModal">关闭</button>
+            <button class="btn" :disabled="loading" @click="saveEdgeAndClose">保存</button>
+            <button class="btn danger" :disabled="loading" @click="confirmDanger('deleteEdge')">删除</button>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -1017,6 +1061,31 @@ function openInfoModal(title, message) {
 function closeInfoModal() {
   infoModal.value.open = false;
 }
+
+const editorModal = ref({ open: false });
+function openEditorModal() {
+  editorModal.value.open = true;
+}
+function closeEditorModal() {
+  editorModal.value.open = false;
+}
+async function saveNodeAndClose() {
+  await saveNode();
+  closeEditorModal();
+}
+async function saveEdgeAndClose() {
+  await saveEdge();
+  closeEditorModal();
+}
+
+// 选中节点/关系时自动弹出属性编辑（更像产品）
+watch(
+  () => selected.value?.id,
+  (id) => {
+    if (!id) return;
+    openEditorModal();
+  }
+);
 </script>
 
 <style scoped>
@@ -1197,6 +1266,9 @@ function closeInfoModal() {
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
   padding: 14px 14px 12px;
   color: #e2e8f0;
+}
+.modal.large {
+  width: min(980px, calc(100vw - 24px));
 }
 .modal.danger {
   border-color: rgba(239, 68, 68, 0.45);
