@@ -25,56 +25,7 @@
     <div v-if="toastErr" class="toast err">{{ toastErr }}</div>
 
     <div class="body">
-      <!-- left -->
-      <div class="panel left">
-        <div class="panel-title">本体数据</div>
-        <div class="tabs">
-          <button class="tab" :class="{ active: nodeTab === 'behaviors' }" @click="nodeTab = 'behaviors'">行为</button>
-          <button class="tab" :class="{ active: nodeTab === 'rules' }" @click="nodeTab = 'rules'">规则</button>
-          <button class="tab" :class="{ active: nodeTab === 'states' }" @click="nodeTab = 'states'">状态</button>
-          <button class="tab" :class="{ active: nodeTab === 'objects' }" @click="nodeTab = 'objects'">对象</button>
-          <button class="tab" :class="{ active: nodeTab === 'relations' }" @click="nodeTab = 'relations'">关系</button>
-        </div>
-        <input class="search" v-model="kw" placeholder="搜索名称/类型…" />
-
-        <div class="list">
-          <template v-if="nodeTab !== 'relations'">
-            <div
-              v-for="n in filteredEntities"
-              :key="n.id"
-              class="rowitem"
-              :class="{ selected: selected?.kind === 'node' && selected.id === n.id }"
-              @click="selectNodeById(n.id)"
-            >
-              <div class="row-title">{{ n.name }}</div>
-              <div class="row-sub">{{ n.label }} · {{ n.id }}</div>
-            </div>
-          </template>
-          <template v-else>
-            <div
-              v-for="e in filteredRelations"
-              :key="e.id"
-              class="rowitem"
-              :class="{ selected: selected?.kind === 'edge' && selected.id === e.id }"
-              @click="selectEdgeById(e.id)"
-            >
-              <div class="row-title">{{ e.type }}</div>
-              <div class="row-sub">{{ e.src }} → {{ e.dst }}</div>
-            </div>
-          </template>
-        </div>
-
-        <div class="panel-footer">
-          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntity">
-            {{ createBtnText }}
-          </button>
-          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
-            {{ linkMode ? '退出创建关系' : '创建关系' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- center -->
+      <!-- graph (main) -->
       <div class="panel center">
         <div class="toolbar">
           <div class="query">
@@ -104,59 +55,109 @@
         <div ref="cyEl" class="graph"></div>
       </div>
 
-      <!-- right -->
-      <div class="panel right">
-        <div class="panel-title">属性编辑</div>
-
-        <div v-if="!selected" class="empty">点击左侧列表或图谱中的节点/关系进行编辑。</div>
-
-        <template v-else-if="selected.kind === 'node'">
-          <div class="kv">
-            <div class="k">ID</div>
-            <div class="v mono">{{ selected.id }}</div>
+      <!-- sidebar (data + inspector) -->
+      <div class="sidebar">
+        <div class="panel left">
+          <div class="panel-title">本体数据</div>
+          <div class="tabs">
+            <button class="tab" :class="{ active: nodeTab === 'behaviors' }" @click="nodeTab = 'behaviors'">行为</button>
+            <button class="tab" :class="{ active: nodeTab === 'rules' }" @click="nodeTab = 'rules'">规则</button>
+            <button class="tab" :class="{ active: nodeTab === 'states' }" @click="nodeTab = 'states'">状态</button>
+            <button class="tab" :class="{ active: nodeTab === 'objects' }" @click="nodeTab = 'objects'">对象</button>
+            <button class="tab" :class="{ active: nodeTab === 'relations' }" @click="nodeTab = 'relations'">关系</button>
           </div>
-          <label>名称</label>
-          <input v-model="editNode.name" />
-          <label>标签</label>
-          <input v-model="editNode.label" />
-          <label>Props（JSON）</label>
-          <textarea v-model="editNode.propsText" rows="10" class="mono"></textarea>
-          <div class="btnrow">
-            <button class="btn" :disabled="loading" @click="saveNode">保存</button>
-            <button class="btn danger" :disabled="loading" @click="deleteNode">删除</button>
-          </div>
-        </template>
+          <input class="search" v-model="kw" placeholder="搜索名称/类型…" />
 
-        <template v-else>
-          <div class="kv">
-            <div class="k">ID</div>
-            <div class="v mono">{{ selected.id }}</div>
+          <div class="list">
+            <template v-if="nodeTab !== 'relations'">
+              <div
+                v-for="n in filteredEntities"
+                :key="n.id"
+                class="rowitem"
+                :class="{ selected: selected?.kind === 'node' && selected.id === n.id }"
+                @click="selectNodeById(n.id)"
+              >
+                <div class="row-title">{{ n.name }}</div>
+                <div class="row-sub">{{ n.label }} · {{ n.id }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <div
+                v-for="e in filteredRelations"
+                :key="e.id"
+                class="rowitem"
+                :class="{ selected: selected?.kind === 'edge' && selected.id === e.id }"
+                @click="selectEdgeById(e.id)"
+              >
+                <div class="row-title">{{ e.type }}</div>
+                <div class="row-sub">{{ e.src }} → {{ e.dst }}</div>
+              </div>
+            </template>
           </div>
-          <label>关系类型</label>
-          <input v-model="editEdge.type" />
-          <label>源节点</label>
-          <select v-model="editEdge.src">
-            <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
-          </select>
-          <label>目标节点</label>
-          <select v-model="editEdge.dst">
-            <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
-          </select>
-          <label>Props（JSON）</label>
-          <textarea v-model="editEdge.propsText" rows="10" class="mono"></textarea>
-          <div class="btnrow">
-            <button class="btn" :disabled="loading" @click="saveEdge">保存</button>
-            <button class="btn danger" :disabled="loading" @click="deleteEdge">删除</button>
-          </div>
-        </template>
 
-        <div v-if="linkMode && linkDraft.src && linkDraft.dst" class="card-mini">
-          <div class="panel-title">创建关系</div>
-          <label>关系类型</label>
-          <input v-model="linkDraft.type" />
-          <label>Props（JSON）</label>
-          <textarea v-model="linkDraft.propsText" rows="6" class="mono"></textarea>
-          <button class="btn" :disabled="loading" @click="createLink">创建该关系</button>
+          <div class="panel-footer">
+            <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntity">
+              {{ createBtnText }}
+            </button>
+            <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
+              {{ linkMode ? '退出创建关系' : '创建关系' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="panel right">
+          <div class="panel-title">属性编辑</div>
+
+          <div v-if="!selected" class="empty">点击左侧列表或图谱中的节点/关系进行编辑。</div>
+
+          <template v-else-if="selected.kind === 'node'">
+            <div class="kv">
+              <div class="k">ID</div>
+              <div class="v mono">{{ selected.id }}</div>
+            </div>
+            <label>名称</label>
+            <input v-model="editNode.name" />
+            <label>标签</label>
+            <input v-model="editNode.label" />
+            <label>Props（JSON）</label>
+            <textarea v-model="editNode.propsText" rows="10" class="mono"></textarea>
+            <div class="btnrow">
+              <button class="btn" :disabled="loading" @click="saveNode">保存</button>
+              <button class="btn danger" :disabled="loading" @click="deleteNode">删除</button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="kv">
+              <div class="k">ID</div>
+              <div class="v mono">{{ selected.id }}</div>
+            </div>
+            <label>关系类型</label>
+            <input v-model="editEdge.type" />
+            <label>源节点</label>
+            <select v-model="editEdge.src">
+              <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
+            </select>
+            <label>目标节点</label>
+            <select v-model="editEdge.dst">
+              <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }} ({{ n.id }})</option>
+            </select>
+            <label>Props（JSON）</label>
+            <textarea v-model="editEdge.propsText" rows="10" class="mono"></textarea>
+            <div class="btnrow">
+              <button class="btn" :disabled="loading" @click="saveEdge">保存</button>
+              <button class="btn danger" :disabled="loading" @click="deleteEdge">删除</button>
+            </div>
+          </template>
+
+          <div v-if="linkMode && linkDraft.src && linkDraft.dst" class="card-mini">
+            <div class="panel-title">创建关系</div>
+            <label>关系类型</label>
+            <input v-model="linkDraft.type" />
+            <label>Props（JSON）</label>
+            <textarea v-model="linkDraft.propsText" rows="6" class="mono"></textarea>
+            <button class="btn" :disabled="loading" @click="createLink">创建该关系</button>
+          </div>
         </div>
       </div>
     </div>
@@ -778,9 +779,24 @@ watch(selected, () => highlightSelected());
 
 .body {
   display: grid;
-  grid-template-columns: 320px 1fr 360px;
+  grid-template-columns: 1fr 440px;
   gap: 12px;
   min-height: 520px;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 520px;
+}
+.sidebar .panel {
+  min-height: 0;
+}
+.sidebar .left {
+  flex: 1.2;
+}
+.sidebar .right {
+  flex: 1;
 }
 .panel {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
