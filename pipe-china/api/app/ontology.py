@@ -17,6 +17,10 @@ class OntologyStore:
     轻量封装 Neo4j：
     - 实体节点：(:Concept {id, name, label, props_json})
     - 关系边：  (src)-[:REL {id, type, props_json}]->(dst)
+
+    草稿（临时图谱，按 draft_id 隔离）：
+    - 实体节点：(:DraftConcept {draft_id, id, name, label, props_json})
+    - 关系边：  (src)-[:DREL {draft_id, id, type, props_json}]->(dst)
     """
 
     def __init__(self, uri: str, user: str, password: str):
@@ -93,6 +97,164 @@ class OntologyStore:
             rec = session.run(query, id=rel_id, src=src, dst=dst, type=rel_type, props_json=props_json).single()
         data = rec.data()
         return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
+
+    # --------------------
+    # Draft graph storage
+    # --------------------
+
+    def save_draft(self, draft_id: str, nodes: list[Entity], edges: list[Relation]) -> None:
+        """把抽取结果写入“临时图谱”（隔离于正式图谱）。"""
+        for n in nodes:
+            self.upsert_draft_entity_by_id(draft_id, n.id, n.name, n.label or "Concept", n.props or {})
+        for e in edges:
+            self.upsert_draft_relation_by_id(draft_id, e.id, e.src, e.dst, e.type or "RELATED_TO", e.props or {})
+
+    def upsert_draft_entity_by_id(self, draft_id: str, entity_id: str, name: str, label: str, props: dict) -> Entity:
+        props_json = json.dumps(props or {}, ensure_ascii=False)
+        query = """
+        MERGE (n:DraftConcept {draft_id:$draft_id, id:$id})
+        SET n.name = $name,
+            n.label = $label,
+            n.props_json = $props_json
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(query, draft_id=draft_id, id=entity_id, name=name, label=label, props_json=props_json).single()
+        data = rec.data()
+        return Entity(id=data["id"], label=data.get("label", "Concept"), name=data["name"], props=self._loads_props(data.get("props_json")))
+
+    def upsert_draft_relation_by_id(self, draft_id: str, rel_id: str, src: str, dst: str, rel_type: str, props: dict) -> Relation:
+        props_json = json.dumps(props or {}, ensure_ascii=False)
+        query = """
+        MATCH (s:DraftConcept {draft_id:$draft_id, id:$src})
+        MATCH (d:DraftConcept {draft_id:$draft_id, id:$dst})
+        MERGE (s)-[r:DREL {draft_id:$draft_id, id:$id}]->(d)
+        SET r.type = $type,
+            r.props_json = $props_json
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        """
+        with self.driver.session() as session:
+            rec = session.run(
+                query,
+                draft_id=draft_id,
+                id=rel_id,
+                src=src,
+                dst=dst,
+                type=rel_type,
+                props_json=props_json,
+            ).single()
+        data = rec.data()
+        return Relation(id=data["id"], type=data.get("type", "RELATED_TO"), src=data["src"], dst=data["dst"], props=self._loads_props(data.get("props_json")))
+
+    def list_draft_entities(self, draft_id: str, limit: int = 2000) -> list[Entity]:
+        query = """
+        MATCH (n:DraftConcept {draft_id:$draft_id})
+        RETURN n.id AS id, n.label AS label, n.name AS name, n.props_json AS props_json
+        ORDER BY n.name ASC
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            items: list[Entity] = []
+            for rec in session.run(query, draft_id=draft_id, limit=limit):
+                data = rec.data()
+                items.append(
+                    Entity(
+                        id=data["id"],
+                        label=data.get("label", "Concept"),
+                        name=data.get("name") or "",
+                        props=self._loads_props(data.get("props_json")),
+                    )
+                )
+            return items
+
+    def list_draft_relations(self, draft_id: str, limit: int = 5000) -> list[Relation]:
+        query = """
+        MATCH (s:DraftConcept {draft_id:$draft_id})-[r:DREL {draft_id:$draft_id}]->(d:DraftConcept {draft_id:$draft_id})
+        RETURN r.id AS id, r.type AS type, s.id AS src, d.id AS dst, r.props_json AS props_json
+        ORDER BY r.type ASC
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            items: list[Relation] = []
+            for rec in session.run(query, draft_id=draft_id, limit=limit):
+                data = rec.data()
+                items.append(
+                    Relation(
+                        id=data.get("id") or "",
+                        type=data.get("type", "RELATED_TO"),
+                        src=data.get("src") or "",
+                        dst=data.get("dst") or "",
+                        props=self._loads_props(data.get("props_json")),
+                    )
+                )
+            return items
+
+    def delete_draft(self, draft_id: str) -> None:
+        query = "MATCH (n:DraftConcept {draft_id:$draft_id}) DETACH DELETE n"
+        with self.driver.session() as session:
+            session.run(query, draft_id=draft_id).consume()
+
+    def delete_draft_entity(self, draft_id: str, entity_id: str) -> None:
+        query = "MATCH (n:DraftConcept {draft_id:$draft_id, id:$id}) DETACH DELETE n"
+        with self.driver.session() as session:
+            session.run(query, draft_id=draft_id, id=entity_id).consume()
+
+    def delete_draft_relation(self, draft_id: str, rel_id: str) -> None:
+        query = "MATCH ()-[r:DREL {draft_id:$draft_id, id:$id}]-() DELETE r"
+        with self.driver.session() as session:
+            session.run(query, draft_id=draft_id, id=rel_id).consume()
+
+    def query_draft_graph(self, draft_id: str, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
+        depth = max(1, min(int(depth), 4))
+        if root_id:
+            query = f"""
+            MATCH p=(n:DraftConcept {{draft_id:$draft_id, id:$root}})-[*1..{depth}]->(m:DraftConcept {{draft_id:$draft_id}})
+            WITH nodes(p) AS ns, relationships(p) AS rs
+            RETURN ns, rs
+            UNION
+            MATCH p=(n:DraftConcept {{draft_id:$draft_id, id:$root}})<-[*1..{depth}]-(m:DraftConcept {{draft_id:$draft_id}})
+            WITH nodes(p) AS ns, relationships(p) AS rs
+            RETURN ns, rs
+            """
+            params = {"draft_id": draft_id, "root": root_id}
+        else:
+            query = """
+            MATCH p=(n:DraftConcept {draft_id:$draft_id})-[r:DREL {draft_id:$draft_id}]->(m:DraftConcept {draft_id:$draft_id})
+            WITH nodes(p) AS ns, relationships(p) AS rs
+            RETURN ns, rs LIMIT 300
+            """
+            params = {"draft_id": draft_id}
+
+        nodes: dict[str, Entity] = {}
+        edges: dict[str, Relation] = {}
+        with self.driver.session() as session:
+            for rec in session.run(query, **params):
+                for n in rec["ns"]:
+                    nodes[n["id"]] = Entity(
+                        id=n["id"],
+                        label=n.get("label", "Concept"),
+                        name=n.get("name") or "",
+                        props=self._loads_props(n.get("props_json")),
+                    )
+                for r in rec["rs"]:
+                    rid = r.get("id") or f"rel-{uuid.uuid4().hex[:8]}"
+                    edges[rid] = Relation(
+                        id=rid,
+                        type=r.get("type", "RELATED_TO"),
+                        src=r.start_node["id"],
+                        dst=r.end_node["id"],
+                        props=self._loads_props(r.get("props_json")),
+                    )
+        return list(nodes.values()), list(edges.values())
+
+    def commit_draft_id(self, draft_id: str, *, delete_after: bool = True) -> tuple[int, int]:
+        """把临时图谱复制到正式图谱（幂等按 id upsert）。"""
+        nodes = self.list_draft_entities(draft_id, limit=5000)
+        edges = self.list_draft_relations(draft_id, limit=20000)
+        created_nodes, created_edges = self.commit_draft(nodes, edges)
+        if delete_after:
+            self.delete_draft(draft_id)
+        return created_nodes, created_edges
 
     def list_entities(self, limit: int = 500) -> list[Entity]:
         query = """

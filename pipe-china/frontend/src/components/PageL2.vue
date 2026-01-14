@@ -684,16 +684,19 @@ watch(selected, () => highlightSelected());
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid;
+  font-weight: 700;
 }
 .toast.ok {
   background: rgba(34, 211, 238, 0.12);
   border-color: rgba(34, 211, 238, 0.5);
-  color: #e2e8f0;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 .toast.err {
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.5);
-  color: #fee2e2;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 .l2-body {
   display: grid;

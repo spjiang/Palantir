@@ -69,6 +69,8 @@ async def extract_ontology(file: UploadFile = File(...)):
             base_url=DEEPSEEK_BASE_URL,
             model=DEEPSEEK_MODEL,
         )
+        # 写入“临时图谱”（与正式图谱隔离），供该文档的图查询/编辑使用
+        store.save_draft(draft_id, nodes, edges)
         return DraftExtractResponse(draft_id=draft_id, nodes=nodes, edges=edges)
     except HTTPException:
         raise
@@ -115,6 +117,111 @@ def commit_ontology(req: DraftCommitRequest):
         )
     except Exception as e:
         raise HTTPException(500, f"commit failed: {e}")
+
+
+@app.get("/ontology/drafts/{draft_id}/entities", response_model=list[Entity])
+def list_draft_entities(draft_id: str, limit: int = 2000):
+    try:
+        return store.list_draft_entities(draft_id, limit=limit)
+    except Exception as e:
+        raise HTTPException(500, f"list draft entities failed: {e}")
+
+
+@app.get("/ontology/drafts/{draft_id}/relations", response_model=list[Relation])
+def list_draft_relations(draft_id: str, limit: int = 5000):
+    try:
+        return store.list_draft_relations(draft_id, limit=limit)
+    except Exception as e:
+        raise HTTPException(500, f"list draft relations failed: {e}")
+
+
+@app.post("/ontology/drafts/{draft_id}/graph", response_model=GraphResponse)
+def draft_graph(draft_id: str, query: GraphQuery):
+    try:
+        nodes, edges = store.query_draft_graph(draft_id, query.root_id, max(1, min(query.depth, 4)))
+        return GraphResponse(nodes=nodes, edges=edges)
+    except Exception as e:
+        raise HTTPException(500, f"query draft graph failed: {e}")
+
+
+@app.put("/ontology/drafts/{draft_id}/entities/{entity_id}", response_model=Entity)
+def update_draft_entity(draft_id: str, entity_id: str, payload: EntityUpdate):
+    try:
+        # draft 里必须给 name/label（若不传则保持原值）
+        current = {e.id: e for e in store.list_draft_entities(draft_id, limit=5000)}.get(entity_id)
+        if not current:
+            raise HTTPException(404, "draft entity not found")
+        name = payload.name or current.name
+        label = payload.label or current.label
+        props = current.props if payload.props is None else payload.props
+        return store.upsert_draft_entity_by_id(draft_id, entity_id, name, label, props or {})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"update draft entity failed: {e}")
+
+
+@app.delete("/ontology/drafts/{draft_id}/entities/{entity_id}", response_model=dict)
+def delete_draft_entity(draft_id: str, entity_id: str):
+    try:
+        store.delete_draft_entity(draft_id, entity_id)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, f"delete draft entity failed: {e}")
+
+
+@app.put("/ontology/drafts/{draft_id}/relations/{rel_id}", response_model=Relation)
+def upsert_draft_relation(draft_id: str, rel_id: str, payload: RelationUpdate):
+    try:
+        # 关系必须存在端点；若未传则保持原值
+        current = {r.id: r for r in store.list_draft_relations(draft_id, limit=20000)}.get(rel_id)
+        if not current:
+            raise HTTPException(404, "draft relation not found")
+        rel_type = payload.type or current.type
+        src = payload.src or current.src
+        dst = payload.dst or current.dst
+        props = current.props if payload.props is None else payload.props
+        return store.upsert_draft_relation_by_id(draft_id, rel_id, src, dst, rel_type, props or {})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"update draft relation failed: {e}")
+
+
+@app.delete("/ontology/drafts/{draft_id}/relations/{rel_id}", response_model=dict)
+def delete_draft_relation(draft_id: str, rel_id: str):
+    try:
+        store.delete_draft_relation(draft_id, rel_id)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, f"delete draft relation failed: {e}")
+
+
+@app.post("/ontology/drafts/{draft_id}/commit", response_model=ImportResult)
+def commit_draft(draft_id: str, delete_after: bool = True):
+    try:
+        created_nodes, created_edges = store.commit_draft_id(draft_id, delete_after=delete_after)
+        return ImportResult(
+            created_nodes=created_nodes,
+            created_edges=created_edges,
+            sample_nodes=[],
+            sample_edges=[],
+            mode="commit",
+            llm_enabled=True,
+            fallback_used=False,
+            message=f"入库成功（draft_id={draft_id}）",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"commit draft failed: {e}")
+
+
+@app.delete("/ontology/drafts/{draft_id}", response_model=dict)
+def delete_draft(draft_id: str):
+    try:
+        store.delete_draft(draft_id)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(500, f"delete draft failed: {e}")
 
 
 @app.post("/ontology/entities", response_model=Entity)
