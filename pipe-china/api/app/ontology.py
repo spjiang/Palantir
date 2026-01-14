@@ -541,8 +541,8 @@ class OntologyStore:
 
         nodes: dict[str, Entity] = {}
         edges: dict[str, Relation] = {}
-        # 以“名称”为主键的索引，用于避免同名对象在不同 label 分支里被重复创建
-        name_to_id: dict[str, str] = {}
+        # 以 (label,name) 为主键的索引，用于去重同类同名节点（不同类型允许同名共存）
+        key_to_id: dict[str, str] = {}
 
         # entities（对象/状态/行为/证据等都作为实体节点承载，label 决定类型）
         for ent in payload.get("entities", []):
@@ -552,23 +552,23 @@ class OntologyStore:
             label = (ent.get("label") or "Concept").strip() or "Concept"
             props = ent.get("props") or {}
             props = {**props, "source": "deepseek"}
-            # 若同名已存在，优先复用，避免重复节点
-            key_name = name
-            if key_name in name_to_id:
-                eid = name_to_id[key_name]
+            key = f"{label}::{name}"
+            if key in key_to_id:
+                eid = key_to_id[key]
             else:
                 eid = ent_id(name, label)
-                name_to_id[key_name] = eid
+                key_to_id[key] = eid
             nodes[eid] = Entity(id=eid, name=name, label=label, props=props)
 
         # relations（若实体缺失则补 Concept）
         def ensure_node(nm: str, label: str = "Concept") -> str:
             nm = nm.strip()
-            if nm in name_to_id:
-                return name_to_id[nm]
+            key = f"{label}::{nm}"
+            if key in key_to_id:
+                return key_to_id[key]
             eid = ent_id(nm, label)
             nodes[eid] = Entity(id=eid, name=nm, label=label, props={"source": "deepseek"})
-            name_to_id[nm] = eid
+            key_to_id[key] = eid
             return eid
 
         for rel in payload.get("relations", []):
@@ -699,6 +699,7 @@ class OntologyStore:
 
     def commit_draft(self, nodes: list[Entity], edges: list[Relation]) -> tuple[int, int]:
         """把草稿图写入 Neo4j（幂等按 id upsert）。"""
+        self._validate_behaviors_have_objects(nodes, edges)
         created_nodes = 0
         created_edges = 0
         for n in nodes:
@@ -708,6 +709,41 @@ class OntologyStore:
             self.upsert_relation_by_id(e.id, e.src, e.dst, e.type or "RELATED_TO", e.props or {})
             created_edges += 1
         return created_nodes, created_edges
+
+    @staticmethod
+    def _validate_behaviors_have_objects(nodes: list[Entity], edges: list[Relation]) -> None:
+        """
+        产品硬规则：每个 Behavior 必须至少挂 1 个“对象”。
+        判定方式：Behavior 节点至少有一条从自己出发的关系，type 属于 {作用于, 适用对象, AFFECTS, APPLIES_TO}
+        且 dst 节点 label 不属于 {Behavior, Rule, State, Evidence, Artifact}。
+        """
+        id_to_label = {n.id: (n.label or "Concept") for n in nodes}
+        id_to_name = {n.id: n.name for n in nodes}
+        behavior_ids = [n.id for n in nodes if (n.label or "") == "Behavior"]
+        if not behavior_ids:
+            return
+
+        allowed_types = {"作用于", "适用对象", "AFFECTS", "APPLIES_TO"}
+        non_object_labels = {"Behavior", "Rule", "State", "Evidence", "Artifact"}
+
+        # 建立行为 -> 目标集合
+        targets: dict[str, set[str]] = {bid: set() for bid in behavior_ids}
+        for e in edges:
+            if e.src in targets and (e.type or "") in allowed_types:
+                targets[e.src].add(e.dst)
+
+        missing: list[str] = []
+        for bid in behavior_ids:
+            ok = False
+            for dst in targets.get(bid, set()):
+                if id_to_label.get(dst, "Concept") not in non_object_labels:
+                    ok = True
+                    break
+            if not ok:
+                missing.append(f"{id_to_name.get(bid, bid)}({bid})")
+
+        if missing:
+            raise ValueError("行为未挂载对象（每个行为必须至少作用于 1 个对象）: " + ", ".join(missing))
 
     @staticmethod
     def _loads_props(v) -> dict:

@@ -23,15 +23,30 @@
 
     <div v-if="toastOk" class="toast ok">{{ toastOk }}</div>
     <div v-if="toastErr" class="toast err">{{ toastErr }}</div>
+    <div class="stats" v-if="stats.totalNodes || stats.totalEdges">
+      <span class="st">行为 {{ stats.behaviors }}</span>
+      <span class="st">规则 {{ stats.rules }}</span>
+      <span class="st">状态 {{ stats.states }}</span>
+      <span class="st">对象 {{ stats.objects }}</span>
+      <span class="st">关系 {{ stats.totalEdges }}</span>
+    </div>
+    <!-- 抽取流式面板：可收起/展开 -->
     <div v-if="streamPanel.open" class="stream">
       <div class="stream-head">
         <div class="stream-title">实时抽取（DeepSeek 流式）</div>
         <div class="stream-stage">{{ streamPanel.stage }}</div>
-        <button class="btn secondary mini" @click="streamPanel.open = false">收起</button>
+        <button class="btn secondary mini" @click="collapseStream">收起</button>
       </div>
       <div class="stream-body mono">
         {{ streamPanel.text || "（等待模型返回…）" }}<span v-if="loading" class="cursor">▍</span>
       </div>
+    </div>
+    <div v-else-if="streamPanel.hasEverOpened" class="stream-collapsed">
+      <button class="btn secondary mini" @click="expandStream">
+        展开实时抽取<span v-if="streamPanel.stage">（{{ streamPanel.stage }}）</span>
+      </button>
+      <span class="stream-hint" v-if="loading">正在抽取中…</span>
+      <span class="stream-hint" v-else-if="streamPanel.text">已记录抽取内容，可展开查看</span>
     </div>
 
     <div class="body">
@@ -109,9 +124,12 @@
           <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId) || nodeTab==='relations'" @click="openCreateEntityModal">
             {{ createBtnText }}
           </button>
-            <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
-              {{ linkMode ? '退出创建关系' : '创建关系' }}
-            </button>
+          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="openCreateRelationModal">
+            创建关系
+          </button>
+          <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
+            {{ linkMode ? '退出连线' : '连线创建' }}
+          </button>
           </div>
         </div>
 
@@ -197,6 +215,40 @@
       </div>
     </div>
 
+    <!-- create relation modal -->
+    <div v-if="createRelModal.open" class="modal-backdrop" @click.self="closeCreateRelModal">
+      <div class="modal">
+        <div class="modal-title">创建关系</div>
+        <div class="modal-sub">建议填写一个有意义的关系 ID（例如：rel-xxx）。不填则系统自动生成。</div>
+
+        <label>ID（可选）</label>
+        <input v-model="createRelModal.form.id" class="mono" placeholder="例如 rel-beh-acts-on-seg" />
+
+        <label>关系类型</label>
+        <input v-model="createRelModal.form.type" placeholder="例如：作用于 / 产生 / 约束 / 需要证据" />
+
+        <label>源节点</label>
+        <select v-model="createRelModal.form.src">
+          <option value="" disabled>请选择源节点</option>
+          <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }}（{{ n.label }} · {{ n.id }}）</option>
+        </select>
+
+        <label>目标节点</label>
+        <select v-model="createRelModal.form.dst">
+          <option value="" disabled>请选择目标节点</option>
+          <option v-for="n in entities" :key="n.id" :value="n.id">{{ n.name }}（{{ n.label }} · {{ n.id }}）</option>
+        </select>
+
+        <label>Props（JSON）</label>
+        <textarea v-model="createRelModal.form.propsText" rows="10" class="mono"></textarea>
+
+        <div class="btnrow">
+          <button class="btn secondary" :disabled="loading" @click="closeCreateRelModal">取消</button>
+          <button class="btn" :disabled="loading || !createRelModal.form.src || !createRelModal.form.dst" @click="createRelationFromModal">创建</button>
+        </div>
+      </div>
+    </div>
+
     <!-- confirm danger modal -->
     <div v-if="confirmModal.open" class="modal-backdrop" @click.self="closeConfirmModal">
       <div class="modal danger">
@@ -205,6 +257,17 @@
         <div class="btnrow">
           <button class="btn secondary" :disabled="loading" @click="closeConfirmModal">取消</button>
           <button class="btn danger" :disabled="loading" @click="runConfirmAction">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- info modal -->
+    <div v-if="infoModal.open" class="modal-backdrop" @click.self="closeInfoModal">
+      <div class="modal">
+        <div class="modal-title">{{ infoModal.title }}</div>
+        <div class="modal-sub mono" style="white-space: pre-wrap">{{ infoModal.message }}</div>
+        <div class="btnrow">
+          <button class="btn" @click="closeInfoModal">我知道了</button>
         </div>
       </div>
     </div>
@@ -232,7 +295,16 @@ const file = ref(null);
 const loading = ref(false);
 const toastOk = ref("");
 const toastErr = ref("");
-const streamPanel = ref({ open: false, stage: "", text: "", done: false });
+const streamPanel = ref({ open: false, stage: "", text: "", done: false, hasEverOpened: false });
+
+function collapseStream() {
+  streamPanel.value.open = false;
+  streamPanel.value.hasEverOpened = true;
+}
+function expandStream() {
+  streamPanel.value.open = true;
+  streamPanel.value.hasEverOpened = true;
+}
 
 const entities = ref([]);
 const relations = ref([]);
@@ -509,7 +581,7 @@ async function extract() {
   fd.append("file", file.value);
   try {
     // 高级感：流式实时展示 DeepSeek 抽取过程（SSE over fetch stream）
-    streamPanel.value = { open: true, stage: "调用中", text: "", done: false };
+    streamPanel.value = { open: true, stage: "调用中", text: "", done: false, hasEverOpened: true };
     const res = await fetch(`${props.apiBase}/ontology/extract/stream`, { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
     if (!res.body) throw new Error("浏览器不支持流式读取");
@@ -541,6 +613,7 @@ async function extract() {
         } else if (ev === "done") {
           streamPanel.value.stage = "完成";
           streamPanel.value.done = true;
+          streamPanel.value.hasEverOpened = true;
           emit("draft-created", payload.draft_id);
           toastSuccess(`草稿已生成：节点 ${(payload.nodes || []).length}，关系 ${(payload.edges || []).length}。`);
           // 拉取草稿数据刷新画布
@@ -619,7 +692,7 @@ async function createEntityFromModal() {
     toastSuccess(`创建成功：${data.name}（ID=${data.id}）`);
     closeCreateModal();
   } catch (e) {
-    toastError(`新建实体失败: ${e}`);
+    toastError(`新建对象失败: ${e}`);
   } finally {
     loading.value = false;
   }
@@ -631,6 +704,16 @@ const createBtnText = computed(() => {
   if (nodeTab.value === "states") return "新建状态";
   if (nodeTab.value === "objects") return "新建对象";
   return "新建";
+});
+
+const stats = computed(() => {
+  const totalNodes = entities.value.length;
+  const totalEdges = relations.value.length;
+  const behaviors = entities.value.filter((n) => (n.label || "") === "Behavior").length;
+  const rules = entities.value.filter((n) => (n.label || "") === "Rule").length;
+  const states = entities.value.filter((n) => (n.label || "") === "State").length;
+  const objects = Math.max(0, totalNodes - behaviors - rules - states);
+  return { totalNodes, totalEdges, behaviors, rules, states, objects };
 });
 
 async function createLink() {
@@ -645,7 +728,13 @@ async function createLink() {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ src: linkDraft.value.src, dst: linkDraft.value.dst, type: linkDraft.value.type || "RELATED_TO", props: propsObj }),
+      body: JSON.stringify({
+        id: null,
+        src: linkDraft.value.src,
+        dst: linkDraft.value.dst,
+        type: linkDraft.value.type || "RELATED_TO",
+        props: propsObj,
+      }),
     });
     if (!res.ok) throw new Error(await res.text());
     await refresh();
@@ -766,6 +855,11 @@ const createModal = ref({
   form: { id: "", name: "", label: "Concept", propsText: "{}" },
 });
 
+const createRelModal = ref({
+  open: false,
+  form: { id: "", type: "作用于", src: "", dst: "", propsText: "{}" },
+});
+
 const confirmModal = ref({
   open: false,
   title: "确认操作",
@@ -778,9 +872,53 @@ function closeConfirmModal() {
   confirmModal.value.action = null;
 }
 
+function openCreateRelationModal() {
+  // 尝试用当前“连线草稿”预填 src/dst
+  const src = linkDraft.value.src || "";
+  const dst = linkDraft.value.dst || "";
+  createRelModal.value = {
+    open: true,
+    form: { id: "", type: "作用于", src, dst, propsText: JSON.stringify({ source: "manual" }, null, 2) },
+  };
+}
+
+function closeCreateRelModal() {
+  createRelModal.value.open = false;
+}
+
+async function createRelationFromModal() {
+  const id = (createRelModal.value.form.id || "").trim() || null;
+  const type = (createRelModal.value.form.type || "").trim() || "RELATED_TO";
+  const src = createRelModal.value.form.src;
+  const dst = createRelModal.value.form.dst;
+  const propsObj = safeParseJson(createRelModal.value.form.propsText);
+  loading.value = true;
+  try {
+    const url =
+      props.scope === "draft"
+        ? `${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/relations`
+        : `${props.apiBase}/ontology/relations`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, src, dst, type, props: propsObj }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    await refresh();
+    selectEdgeById(data.id);
+    toastSuccess(`创建关系成功：${data.type}（ID=${data.id}）`);
+    closeCreateRelModal();
+  } catch (e) {
+    toastError(`创建关系失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
 function confirmDanger(action) {
   const map = {
-    deleteNode: { title: "删除实体", message: "确认删除该实体？相关关系也会被删除。", action: deleteNode },
+    deleteNode: { title: "删除对象", message: "确认删除该对象？相关关系也会被删除。", action: deleteNode },
     deleteEdge: { title: "删除关系", message: "确认删除该关系？", action: deleteEdge },
     cancelDraft: { title: "取消草稿", message: "确认取消草稿？将删除临时图谱数据，且不可恢复。", action: cancelDraftDo },
     commitDraft: { title: "确认入库", message: "确认将草稿入库到正式图数据库吗？入库后草稿将被清理。", action: commitDraftDo },
@@ -799,6 +937,15 @@ async function runConfirmAction() {
 
 // 将需要确认的操作拆出，避免递归 confirm
 async function commitDraftDo() {
+  // 前端先校验，避免无意义请求：每个行为必须至少挂 1 个对象
+  const issues = validateBehaviorsMounted();
+  if (issues.length) {
+    openInfoModal(
+      "入库校验未通过",
+      "以下行为未挂载任何对象（请为每个行为创建“作用于/适用对象”关系后再入库）：\n- " + issues.join("\n- ")
+    );
+    return;
+  }
   loading.value = true;
   try {
     const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/commit`, { method: "POST" });
@@ -840,6 +987,35 @@ async function purgeAllDo() {
   } finally {
     loading.value = false;
   }
+}
+
+function validateBehaviorsMounted() {
+  const byId = new Map(entities.value.map((n) => [n.id, n]));
+  const behaviors = entities.value.filter((n) => (n.label || "") === "Behavior");
+  if (!behaviors.length) return [];
+
+  const nonObjectLabels = new Set(["Behavior", "Rule", "State", "Evidence", "Artifact"]);
+  const okTypes = new Set(["作用于", "适用对象", "AFFECTS", "APPLIES_TO"]);
+  const issues = [];
+
+  for (const b of behaviors) {
+    const outs = relations.value.filter((e) => e.src === b.id && okTypes.has(e.type || ""));
+    const hasObj = outs.some((e) => {
+      const dst = byId.get(e.dst);
+      if (!dst) return false;
+      return !nonObjectLabels.has(dst.label || "Concept");
+    });
+    if (!hasObj) issues.push(`${b.name}（${b.id}）`);
+  }
+  return issues;
+}
+
+const infoModal = ref({ open: false, title: "", message: "" });
+function openInfoModal(title, message) {
+  infoModal.value = { open: true, title, message };
+}
+function closeInfoModal() {
+  infoModal.value.open = false;
 }
 </script>
 
@@ -916,6 +1092,23 @@ async function purgeAllDo() {
   color: #ffffff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.35);
+  color: rgba(226, 232, 240, 0.9);
+  font-size: 12px;
+}
+.st {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.08);
+}
 .stream {
   border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 12px;
@@ -946,6 +1139,15 @@ async function purgeAllDo() {
   padding: 10px 12px;
   white-space: pre-wrap;
   color: rgba(226, 232, 240, 0.85);
+}
+.stream-collapsed {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.stream-hint {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.65);
 }
 .btn.mini {
   padding: 6px 10px;
@@ -1020,6 +1222,7 @@ async function purgeAllDo() {
   display: grid;
   grid-template-columns: 1fr 440px;
   gap: 12px;
+  height: min(720px, calc(100vh - 280px));
   min-height: 520px;
 }
 .sidebar {
@@ -1027,6 +1230,7 @@ async function purgeAllDo() {
   flex-direction: column;
   gap: 12px;
   min-height: 520px;
+  height: 100%;
 }
 .sidebar .panel {
   min-height: 0;
@@ -1045,6 +1249,7 @@ async function purgeAllDo() {
   display: flex;
   flex-direction: column;
   color: #e2e8f0;
+  min-height: 0; /* 允许子元素滚动，不撑开父容器 */
 }
 .panel-title {
   padding: 12px 12px 8px;
@@ -1080,6 +1285,8 @@ async function purgeAllDo() {
 .list {
   padding: 0 6px 6px;
   overflow: auto;
+  flex: 1;
+  min-height: 0;
 }
 .rowitem {
   padding: 10px 10px;
@@ -1206,6 +1413,9 @@ async function purgeAllDo() {
   display: block;
   font-weight: 800;
   margin: 10px 12px 6px;
+}
+.right {
+  overflow: auto;
 }
 .right input,
 .right select,

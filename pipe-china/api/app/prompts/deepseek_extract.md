@@ -9,6 +9,9 @@
 输出要求：
 - 只输出严格 JSON（不要 Markdown，不要解释文字）
 - 字段允许为空，但 key 必须存在
+- 强制要求：entities 不得为空；至少包含“管段、传感器、告警、运维任务、证据、事件、站场、风险状态”这些基础实体（名称尽量用中文）
+- 强制要求：每个 behaviors 必须至少挂 1 个对象：behaviors[].affects 数组长度 >= 1（对象名称必须来自 entities 里的 name）
+- 强制要求：behaviors 里的 state_from / state_to / produces 尽量补齐（用于建立可视化的行为链路）
 
 你必须输出（抽取优先级：先 behaviors/state_transitions，再 rules，再 entities/relations）：
 - entities：对象/状态/证据/任务/事件等（label 必须贴近真实产品，例如 PipelineSegment/Sensor/Alarm/MaintenanceTask/Evidence/Incident/Station/State/Behavior/Rule/Artifact）
