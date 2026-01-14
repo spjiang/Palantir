@@ -135,6 +135,25 @@ def list_draft_relations(draft_id: str, limit: int = 5000):
         raise HTTPException(500, f"list draft relations failed: {e}")
 
 
+@app.post("/ontology/drafts/{draft_id}/entities", response_model=Entity)
+def create_draft_entity(draft_id: str, payload: EntityCreate):
+    try:
+        # 生成草稿实体 id（与正式库隔离）
+        entity_id = f"ent-manual-{uuid.uuid4().hex[:10]}"
+        return store.upsert_draft_entity_by_id(draft_id, entity_id, payload.name, payload.label, payload.props or {})
+    except Exception as e:
+        raise HTTPException(500, f"create draft entity failed: {e}")
+
+
+@app.post("/ontology/drafts/{draft_id}/relations", response_model=Relation)
+def create_draft_relation(draft_id: str, payload: RelationCreate):
+    try:
+        rel_id = f"rel-manual-{uuid.uuid4().hex[:10]}"
+        return store.upsert_draft_relation_by_id(draft_id, rel_id, payload.src, payload.dst, payload.type, payload.props or {})
+    except Exception as e:
+        raise HTTPException(500, f"create draft relation failed: {e}")
+
+
 @app.post("/ontology/drafts/{draft_id}/graph", response_model=GraphResponse)
 def draft_graph(draft_id: str, query: GraphQuery):
     try:
