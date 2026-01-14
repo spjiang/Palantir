@@ -862,6 +862,9 @@ watch(selected, () => highlightSelected());
   padding: 10px 12px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);
   gap: 10px;
+  position: relative;
+  z-index: 5;
+  overflow: visible;
 }
 .query {
   display: flex;
@@ -883,6 +886,7 @@ watch(selected, () => highlightSelected());
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .legend {
   display: inline-flex;
@@ -893,6 +897,12 @@ watch(selected, () => highlightSelected());
   color: rgba(226, 232, 240, 0.75);
   font-size: 12px;
   white-space: nowrap;
+  position: relative;
+  z-index: 10;
+  background: rgba(2, 6, 23, 0.55);
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 .lg-item {
   display: inline-flex;
@@ -930,6 +940,8 @@ watch(selected, () => highlightSelected());
 .graph {
   flex: 1;
   min-height: 440px;
+  position: relative;
+  z-index: 1;
   background:
     radial-gradient(1200px 600px at 50% 0%, rgba(99, 102, 241, 0.12), transparent 60%),
     radial-gradient(900px 500px at 20% 20%, rgba(34, 211, 238, 0.10), transparent 55%),
