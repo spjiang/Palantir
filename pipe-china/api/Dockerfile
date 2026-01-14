@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+ARG PYTHON_IMAGE=registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
+FROM ${PYTHON_IMAGE}
 
 WORKDIR /app
 
