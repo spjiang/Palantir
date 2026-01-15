@@ -32,7 +32,10 @@
       </aside>
 
       <section class="content">
-        <RouterView :api-base="apiBase" />
+        <!-- 通过 v-slot 显式把 apiBase 传给每个页面组件 -->
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" :api-base="apiBase" />
+        </RouterView>
       </section>
     </div>
   </div>
