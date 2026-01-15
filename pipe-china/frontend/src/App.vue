@@ -21,12 +21,12 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import PageL1 from "./components/PageL1.vue";
-import PageL2 from "./components/PageL2.vue";
-import PageL3 from "./components/PageL3.vue";
-import PageL4 from "./components/PageL4.vue";
-import PageL5 from "./components/PageL5.vue";
-import PageL6 from "./components/PageL6.vue";
+import PageL1 from "./layers/l1_data_ingestion_governance/Page.vue";
+import PageL2 from "./layers/l2_ontology_semantics/Page.vue";
+import PageL3 from "./layers/l3_risk_reasoning_models/Page.vue";
+import PageL4 from "./layers/l4_agent_decision_making/Page.vue";
+import PageL5 from "./layers/l5_closed_loop_execution_workflow/Page.vue";
+import PageL6 from "./layers/l6_reports_traceability/Page.vue";
 
 // 远程部署时，浏览器里的 localhost 不是服务器；因此默认使用“当前访问域名 + 固定 API 端口”
 const apiBase = computed(() => {
@@ -40,12 +40,12 @@ const apiBase = computed(() => {
 });
 
 const pages = [
-  { key: "l1", title: "L1 数据接入与治理" },
-  { key: "l2", title: "L2 本体/语义选型" },
-  { key: "l3", title: "L3 风险推理/模型" },
-  { key: "l4", title: "L4 智能体决策" },
-  { key: "l5", title: "L5 执行闭环/工作流" },
-  { key: "l6", title: "L6 战报与追溯" },
+  { key: "l1", title: "L1 Data Ingestion & Governance" },
+  { key: "l2", title: "L2 Ontology & Semantics" },
+  { key: "l3", title: "L3 Risk Reasoning & Models" },
+  { key: "l4", title: "L4 Agent Decision-Making" },
+  { key: "l5", title: "L5 Closed-loop Execution & Workflow" },
+  { key: "l6", title: "L6 Reports & Traceability" },
 ];
 
 const pageMap = {
