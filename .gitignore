@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Frontend build output (if built inside subfolders)
+pipe-china/frontend/node_modules/
+pipe-china/frontend/dist/

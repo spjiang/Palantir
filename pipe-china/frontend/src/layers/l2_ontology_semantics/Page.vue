@@ -1,85 +1,16 @@
 <template>
-  <div class="l2">
-    <div class="stack">
-      <OntologyPanel
-        :api-base="apiBase"
-        scope="draft"
-        title="临时图谱（当前文档）"
-        subtitle="上传业务方案 → DeepSeek 抽取 → 存入临时图谱 → 图查询/编辑 → 确认后入库正式图谱"
-        :draft-id="draftId"
-        @draft-created="onDraftCreated"
-        @draft-cleared="onDraftCleared"
-        @committed="onCommitted"
-      />
-
-      <OntologyPanel
-        :api-base="apiBase"
-        scope="formal"
-        title="正式图谱（全量）"
-        subtitle="展示与维护正式图数据库的全量图谱，支持图查询/编辑"
-        :draft-id="draftId"
-        @purged="onPurged"
-      />
-    </div>
+  <div class="card">
+    <h2>L2 本体/语义选型</h2>
+    <p>请使用左侧菜单分别进入“草稿图谱（抽取/编辑）”与“正式图谱（查询/维护）”。</p>
+    <ul>
+      <li>草稿图谱：上传业务方案，调用 DeepSeek 抽取并在临时图谱中编辑</li>
+      <li>正式图谱：对正式图数据库做查询与维护</li>
+    </ul>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
-import OntologyPanel from "../../components/OntologyPanel.vue";
-
 defineProps({
   apiBase: { type: String, required: true },
 });
-
-// 避免“页面被刷新/组件重载”导致 draftId 丢失，从而草稿画布清空
-const DRAFT_ID_STORAGE_KEY = "pipe-china:draftId";
-const draftId = ref("");
-
-onMounted(() => {
-  try {
-    draftId.value = sessionStorage.getItem(DRAFT_ID_STORAGE_KEY) || "";
-  } catch {
-    // ignore
-  }
-});
-
-watch(
-  () => draftId.value,
-  (v) => {
-    try {
-      if (v) sessionStorage.setItem(DRAFT_ID_STORAGE_KEY, v);
-      else sessionStorage.removeItem(DRAFT_ID_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-  }
-);
-
-function onDraftCreated(id) {
-  draftId.value = id;
-}
-function onDraftCleared() {
-  draftId.value = "";
-}
-function onCommitted() {
-  // 正式图谱面板会自行刷新；这里不需要额外操作
-}
-function onPurged() {
-  draftId.value = "";
-}
 </script>
-
-<style scoped>
-.l2 {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-</style>
-

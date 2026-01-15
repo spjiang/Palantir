@@ -10,9 +10,10 @@ body {
 }
 
 #app {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
 }
 
 .card {
@@ -24,26 +25,7 @@ body {
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
 }
 
-.tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.tab {
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  background: #e2e8f0;
-  cursor: pointer;
-}
-
-.tab.active {
-  background: #0ea5e9;
-  color: #fff;
-  border-color: #0ea5e9;
-}
+/* tabs/tab 已迁移到后台布局顶部菜单（AdminLayout.vue） */
 
 .row {
   display: flex;
