@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { h } from "vue";
 
 import AdminLayout from "../layouts/AdminLayout.vue";
+import LayerLayout from "../layouts/LayerLayout.vue";
 
 // L1~L6 概览页（现有内容）
 import L1Overview from "../layers/l1_data_ingestion_governance/Page.vue";
@@ -22,8 +22,6 @@ import L4Chat from "../layers/l4_agent_decision_making/Chat.vue";
 import L5Tasks from "../layers/l5_closed_loop_execution_workflow/Tasks.vue";
 import L6Timeline from "../layers/l6_reports_traceability/Timeline.vue";
 
-const LayerOutlet = { render: () => h("router-view") };
-
 const routes = [
   { path: "/", redirect: "/l2/draft" },
   {
@@ -32,7 +30,7 @@ const routes = [
     children: [
       {
         path: "l1",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l1",
           layerTitle: "L1 数据接入与治理",
@@ -49,7 +47,7 @@ const routes = [
       },
       {
         path: "l2",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l2",
           layerTitle: "L2 本体/语义选型",
@@ -68,7 +66,7 @@ const routes = [
       },
       {
         path: "l3",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l3",
           layerTitle: "L3 风险推理/模型",
@@ -85,7 +83,7 @@ const routes = [
       },
       {
         path: "l4",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l4",
           layerTitle: "L4 智能体决策",
@@ -102,7 +100,7 @@ const routes = [
       },
       {
         path: "l5",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l5",
           layerTitle: "L5 执行闭环/工作流",
@@ -119,7 +117,7 @@ const routes = [
       },
       {
         path: "l6",
-        component: LayerOutlet,
+        component: LayerLayout,
         meta: {
           layerKey: "l6",
           layerTitle: "L6 战报与追溯",
