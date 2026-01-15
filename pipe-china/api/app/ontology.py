@@ -395,23 +395,28 @@ class OntologyStore:
             session.run(query, id=rel_id).consume()
 
     def query_graph(self, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
+        """
+        查询“正式图谱”：
+        - 仅返回 (:Concept)-[:REL]->(:Concept)
+        - 避免把草稿图谱 (:DraftConcept)-[:DREL]->(:DraftConcept) 混进来
+        """
         # Neo4j 不允许在可变长度模式里使用参数（[*1..$depth] 会报错），
         # 因此这里把 depth（已在上层做过限制）作为字面量拼到 Cypher 中。
         depth = max(1, min(int(depth), 4))
         if root_id:
             query = f"""
-            MATCH p=(n {{id:$root}})-[*1..{depth}]->(m)
+            MATCH p=(n:Concept {{id:$root}})-[:REL*1..{depth}]->(m:Concept)
             WITH nodes(p) AS ns, relationships(p) AS rs
             RETURN ns, rs
             UNION
-            MATCH p=(n {{id:$root}})<-[*1..{depth}]-(m)
+            MATCH p=(n:Concept {{id:$root}})<-[:REL*1..{depth}]-(m:Concept)
             WITH nodes(p) AS ns, relationships(p) AS rs
             RETURN ns, rs
             """
             params = {"root": root_id}
         else:
             query = """
-            MATCH p=()-[r]->()
+            MATCH p=(n:Concept)-[r:REL]->(m:Concept)
             WITH nodes(p) AS ns, relationships(p) AS rs
             RETURN ns, rs LIMIT 200
             """
