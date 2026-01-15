@@ -4,8 +4,8 @@
       <OntologyPanel
         :api-base="apiBase"
         scope="draft"
-        title="Draft Graph (Current Document)"
-        subtitle="Upload → DeepSeek extraction → saved to draft graph → query/edit → commit to formal graph"
+        title="临时图谱（当前文档）"
+        subtitle="上传业务方案 → DeepSeek 抽取 → 存入临时图谱 → 图查询/编辑 → 确认后入库正式图谱"
         :draft-id="draftId"
         @draft-created="onDraftCreated"
         @draft-cleared="onDraftCleared"
@@ -15,8 +15,8 @@
       <OntologyPanel
         :api-base="apiBase"
         scope="formal"
-        title="Formal Graph (Full)"
-        subtitle="Browse and maintain the full graph database; query/edit supported"
+        title="正式图谱（全量）"
+        subtitle="展示与维护正式图数据库的全量图谱，支持图查询/编辑"
         :draft-id="draftId"
         @purged="onPurged"
       />
@@ -32,7 +32,7 @@ defineProps({
   apiBase: { type: String, required: true },
 });
 
-// Prevent draftId loss on reload/component remount
+// 避免“页面被刷新/组件重载”导致 draftId 丢失，从而草稿画布清空
 const DRAFT_ID_STORAGE_KEY = "pipe-china:draftId";
 const draftId = ref("");
 
@@ -63,7 +63,7 @@ function onDraftCleared() {
   draftId.value = "";
 }
 function onCommitted() {
-  // The formal graph panel refreshes itself
+  // 正式图谱面板会自行刷新；这里不需要额外操作
 }
 function onPurged() {
   draftId.value = "";

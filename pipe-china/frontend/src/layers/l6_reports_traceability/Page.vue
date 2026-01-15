@@ -1,27 +1,27 @@
 <template>
   <div class="card">
-    <h2>L6 Reports &amp; Traceability</h2>
-    <p>Timeline &amp; metrics placeholder. Once backend is connected, replace with real queries.</p>
+    <h2>L6 战报与追溯</h2>
+    <p>示意时间线与指标，后端对接后可替换为真实查询。</p>
     <div class="row">
       <div class="card">
-        <h3>Timeline (Sample)</h3>
+        <h3>时间线（示例）</h3>
         <ul>
-          <li>t0 Alert: road-001 rainfall spikes</li>
-          <li>t1 Agent: generates a task package (inspection / traffic control prep)</li>
-          <li>t2 Human approval: traffic control prep approved</li>
-          <li>t3 Task receipt: inspection done, photos uploaded</li>
+          <li>t0 预警：road-001 雨强突增</li>
+          <li>t1 智能体：生成任务包（巡查/封控准备）</li>
+          <li>t2 人审：通过封控准备</li>
+          <li>t3 任务回执：巡查完成，上传照片</li>
         </ul>
       </div>
       <div class="card">
-        <h3>Metrics (Sample)</h3>
+        <h3>指标（示例）</h3>
         <ul>
-          <li>Total tasks: 2</li>
-          <li>Completion rate: 50%</li>
-          <li>Alert → dispatch latency: 3s</li>
+          <li>任务总数：2</li>
+          <li>完成率：50%</li>
+          <li>预警→派单时延：3s</li>
         </ul>
       </div>
     </div>
-    <p>Can be wired to backend <code>/reports/incidents/{id}</code> for timeline and metrics.</p>
+    <p>可对接后端 <code>/reports/incidents/{id}</code> 返回时间线与指标。</p>
   </div>
 </template>
 

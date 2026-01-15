@@ -1,16 +1,16 @@
 <template>
   <div class="card">
-    <h2>L4 Agent Decision-Making</h2>
-    <p>DeepSeek integration placeholder: keep an input box on the UI; backend can later proxy DeepSeek (to be implemented).</p>
+    <h2>L4 智能体决策</h2>
+    <p>需真实对接 DeepSeek：前端保留输入框，后端可按现有 API 转发 DeepSeek（需在后端补充）。</p>
     <div class="row">
       <div class="card">
-        <h3>Input</h3>
-        <label>Instruction</label>
-        <textarea v-model="msg" rows="4" placeholder="e.g., assess high-risk points and generate a task package"></textarea>
-        <button :disabled="loading" @click="send">Send (sample response)</button>
+        <h3>对话输入</h3>
+        <label>指令</label>
+        <textarea v-model="msg" rows="4" placeholder="例如：请研判高风险点并生成任务包"></textarea>
+        <button :disabled="loading" @click="send">发送（目前示例响应）</button>
       </div>
       <div class="card">
-        <h3>Response</h3>
+        <h3>返回</h3>
         <pre>{{ resp }}</pre>
       </div>
     </div>
@@ -21,13 +21,13 @@
 import { ref } from "vue";
 
 const msg = ref("");
-const resp = ref("Not invoked yet. Backend needs to integrate the DeepSeek API.");
+const resp = ref("尚未调用。后端需接入 DeepSeek API。");
 const loading = ref(false);
 
 const send = async () => {
   loading.value = true;
-  // Placeholder: once backend implements /agent/chat, replace with a real call
-  resp.value = `Sample response: received "${msg.value || "empty"}". Please integrate DeepSeek on backend to return real results.`;
+  // 这里仅占位，后端补充 /agent/chat 后可改为真实调用
+  resp.value = `示例响应：已收到「${msg.value || "空"}」，请在后端接入 DeepSeek 后替换为真实结果。`;
   loading.value = false;
 };
 </script>

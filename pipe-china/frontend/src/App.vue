@@ -40,12 +40,12 @@ const apiBase = computed(() => {
 });
 
 const pages = [
-  { key: "l1", title: "L1 Data Ingestion & Governance" },
-  { key: "l2", title: "L2 Ontology & Semantics" },
-  { key: "l3", title: "L3 Risk Reasoning & Models" },
-  { key: "l4", title: "L4 Agent Decision-Making" },
-  { key: "l5", title: "L5 Closed-loop Execution & Workflow" },
-  { key: "l6", title: "L6 Reports & Traceability" },
+  { key: "l1", title: "L1 数据接入与治理" },
+  { key: "l2", title: "L2 本体/语义选型" },
+  { key: "l3", title: "L3 风险推理/模型" },
+  { key: "l4", title: "L4 智能体决策" },
+  { key: "l5", title: "L5 执行闭环/工作流" },
+  { key: "l6", title: "L6 战报与追溯" },
 ];
 
 const pageMap = {
