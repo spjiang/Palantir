@@ -565,6 +565,8 @@ const streamPanel = ref({
   showRaw: false,
   showGenerated: false,
   generatedJson: "",
+  partial: null,
+  seen: null,
 });
 
 function collapseStream() {
@@ -584,12 +586,32 @@ function resetStreamPanel() {
   streamPanel.value.hasEverOpened = true;
   streamPanel.value.draftId = "";
   streamPanel.value.json = null;
-  streamPanel.value.edit = null;
+  streamPanel.value.edit = {
+    entities: [],
+    relations: [],
+    rules: [],
+    behaviors: [],
+    state_transitions: [],
+  };
   streamPanel.value.userEdited = false;
   streamPanel.value.parseError = "";
   streamPanel.value.showRaw = false;
   streamPanel.value.showGenerated = false;
   streamPanel.value.generatedJson = "";
+  streamPanel.value.partial = {
+    entities: { scanPos: 0 },
+    relations: { scanPos: 0 },
+    rules: { scanPos: 0 },
+    behaviors: { scanPos: 0 },
+    state_transitions: { scanPos: 0 },
+  };
+  streamPanel.value.seen = {
+    entities: new Set(),
+    relations: new Set(),
+    rules: new Set(),
+    behaviors: new Set(),
+    state_transitions: new Set(),
+  };
 }
 
 function cleanStreamJson(raw) {
@@ -626,9 +648,100 @@ function tryParseStreamJson() {
     streamPanel.value.parseError = "";
     if (!streamPanel.value.userEdited) {
       streamPanel.value.edit = normalizeEditablePayload(parsed);
+      updateGeneratedJson();
     }
   } catch (e) {
     streamPanel.value.parseError = "JSON 还未完整，继续解析中…";
+  }
+}
+
+function extractObjectsFromArray(raw, key, state) {
+  const results = [];
+  const keyIdx = raw.indexOf(`"${key}"`);
+  if (keyIdx < 0) return results;
+  const arrStart = raw.indexOf("[", keyIdx);
+  if (arrStart < 0) return results;
+
+  let i = Math.max(state.scanPos || (arrStart + 1), arrStart + 1);
+  let inStr = false;
+  let esc = false;
+  let depth = 0;
+  let objStart = -1;
+  for (; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (ch === "\\") {
+        esc = true;
+        continue;
+      }
+      if (ch === '"') {
+        inStr = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth += 1;
+      continue;
+    }
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && objStart >= 0) {
+        const objStr = raw.slice(objStart, i + 1);
+        try {
+          results.push({ obj: JSON.parse(objStr), raw: objStr });
+        } catch {
+          // ignore incomplete
+        }
+        objStart = -1;
+      }
+      continue;
+    }
+    if (ch === "]" && depth === 0) {
+      break;
+    }
+  }
+  state.scanPos = i;
+  return results;
+}
+
+function appendStreamObjects(sectionKey, items) {
+  if (!items?.length) return;
+  const list = streamPanel.value.edit?.[sectionKey] || [];
+  const seen = streamPanel.value.seen?.[sectionKey];
+  for (const it of items) {
+    const signature = it.raw || JSON.stringify(it.obj || {});
+    if (seen && seen.has(signature)) continue;
+    seen?.add(signature);
+    list.push({
+      __id: it.obj?.id || it.obj?.name || `${sectionKey}-${list.length + 1}`,
+      __obj: JSON.parse(JSON.stringify(it.obj || {})),
+      __text: JSON.stringify(it.obj || {}, null, 2),
+      __newKey: "",
+      __newVal: "",
+      __error: "",
+    });
+  }
+  streamPanel.value.edit[sectionKey] = list;
+  updateGeneratedJson();
+}
+
+function processStreamIncremental() {
+  const raw = cleanStreamJson(streamPanel.value.text || "");
+  if (!raw || !streamPanel.value.partial) return;
+  const keys = ["entities", "relations", "rules", "behaviors", "state_transitions"];
+  for (const key of keys) {
+    const state = streamPanel.value.partial[key];
+    const items = extractObjectsFromArray(raw, key, state);
+    appendStreamObjects(key, items);
   }
 }
 
@@ -1142,6 +1255,7 @@ async function extract() {
           streamPanel.value.stage = payload.message || payload.stage || "调用中";
         } else if (ev === "token") {
           streamPanel.value.text += payload.text || "";
+          processStreamIncremental();
           tryParseStreamJson();
         } else if (ev === "done") {
           streamPanel.value.stage = "完成";
