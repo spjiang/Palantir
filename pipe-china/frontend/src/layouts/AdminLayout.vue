@@ -87,10 +87,14 @@ function isActiveLayer(key) {
   justify-content: space-between;
   gap: 14px;
   padding: 0 16px;
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0.72));
+  background:
+    radial-gradient(900px 260px at 20% 0%, rgba(34, 211, 238, 0.18), transparent 60%),
+    radial-gradient(900px 260px at 80% 0%, rgba(99, 102, 241, 0.20), transparent 62%),
+    linear-gradient(180deg, rgba(6, 18, 42, 0.82), rgba(6, 18, 42, 0.62));
   color: #e2e8f0;
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
 }
 .brand {
   display: flex;
@@ -155,7 +159,9 @@ function isActiveLayer(key) {
   min-height: calc(100vh - 64px);
 }
 .sidebar {
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.72), rgba(2, 6, 23, 0.55));
+  background:
+    radial-gradient(700px 480px at 30% 10%, rgba(34, 211, 238, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(6, 18, 42, 0.66), rgba(6, 18, 42, 0.50));
   color: rgba(226, 232, 240, 0.92);
   border-right: 1px solid var(--border);
   padding: 12px 10px; /* 更紧凑 */

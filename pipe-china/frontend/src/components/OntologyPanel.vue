@@ -1134,8 +1134,12 @@ watch(
   padding: 10px 12px; /* 更紧凑 */
   border: 1px solid rgba(148, 163, 184, 0.20);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
+  background:
+    radial-gradient(900px 300px at 20% 0%, rgba(34, 211, 238, 0.14), transparent 62%),
+    radial-gradient(900px 300px at 80% 0%, rgba(99, 102, 241, 0.16), transparent 62%),
+    linear-gradient(180deg, rgba(12, 30, 70, 0.78), rgba(6, 18, 42, 0.72));
   color: #e2e8f0;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
 }
 .title {
   font-weight: 900;
@@ -1216,7 +1220,7 @@ watch(
 .stream {
   border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 12px;
-  background: rgba(2, 6, 23, 0.55);
+  background: rgba(6, 18, 42, 0.52);
   overflow: hidden;
 }
 .stream-head {
