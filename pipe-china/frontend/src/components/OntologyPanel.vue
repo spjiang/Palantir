@@ -35,10 +35,91 @@
       <div class="stream-head">
         <div class="stream-title">实时抽取（DeepSeek 流式）</div>
         <div class="stream-stage">{{ streamPanel.stage }}</div>
-        <button class="btn secondary mini" @click="collapseStream">收起</button>
+        <div class="stream-actions">
+          <button
+            v-if="streamPanel.edit"
+            class="btn secondary mini"
+            :disabled="loading"
+            @click="streamPanel.showRaw = !streamPanel.showRaw"
+          >
+            {{ streamPanel.showRaw ? "隐藏原始 JSON" : "显示原始 JSON" }}
+          </button>
+          <button v-if="streamPanel.edit" class="btn mini" :disabled="loading" @click="applyStreamEditsToDraft">
+            同步到草稿
+          </button>
+          <button class="btn secondary mini" @click="collapseStream">收起</button>
+        </div>
       </div>
-      <div class="stream-body mono">
+      <div v-if="streamPanel.showRaw" class="stream-body mono">
         {{ streamPanel.text || "（等待模型返回…）" }}<span v-if="loading" class="cursor">▍</span>
+      </div>
+      <div class="stream-json" v-if="streamPanel.edit">
+        <div v-if="streamPanel.parseError" class="json-hint">{{ streamPanel.parseError }}</div>
+
+        <div class="json-section" v-if="streamPanel.edit.entities?.length">
+          <div class="json-section-title">entities（实体）</div>
+          <div class="json-items">
+            <div class="json-item" v-for="(it, idx) in streamPanel.edit.entities" :key="it.__id">
+              <div class="json-item-head">
+                实体 {{ idx + 1 }}
+                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
+              </div>
+              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="json-section" v-if="streamPanel.edit.relations?.length">
+          <div class="json-section-title">relations（关系）</div>
+          <div class="json-items">
+            <div class="json-item" v-for="(it, idx) in streamPanel.edit.relations" :key="it.__id">
+              <div class="json-item-head">
+                关系 {{ idx + 1 }}
+                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
+              </div>
+              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="json-section" v-if="streamPanel.edit.rules?.length">
+          <div class="json-section-title">rules（规则）</div>
+          <div class="json-items">
+            <div class="json-item" v-for="(it, idx) in streamPanel.edit.rules" :key="it.__id">
+              <div class="json-item-head">
+                规则 {{ idx + 1 }}
+                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
+              </div>
+              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="json-section" v-if="streamPanel.edit.behaviors?.length">
+          <div class="json-section-title">behaviors（行为）</div>
+          <div class="json-items">
+            <div class="json-item" v-for="(it, idx) in streamPanel.edit.behaviors" :key="it.__id">
+              <div class="json-item-head">
+                行为 {{ idx + 1 }}
+                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
+              </div>
+              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="json-section" v-if="streamPanel.edit.state_transitions?.length">
+          <div class="json-section-title">state_transitions（状态迁移）</div>
+          <div class="json-items">
+            <div class="json-item" v-for="(it, idx) in streamPanel.edit.state_transitions" :key="it.__id">
+              <div class="json-item-head">
+                迁移 {{ idx + 1 }}
+                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
+              </div>
+              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div v-else-if="streamPanel.hasEverOpened" class="stream-collapsed">
@@ -339,7 +420,19 @@ const file = ref(null);
 const loading = ref(false);
 const toastOk = ref("");
 const toastErr = ref("");
-const streamPanel = ref({ open: false, stage: "", text: "", done: false, hasEverOpened: false });
+const streamPanel = ref({
+  open: false,
+  stage: "",
+  text: "",
+  done: false,
+  hasEverOpened: false,
+  draftId: "",
+  json: null,
+  edit: null,
+  userEdited: false,
+  parseError: "",
+  showRaw: false,
+});
 
 function collapseStream() {
   streamPanel.value.open = false;
@@ -348,6 +441,140 @@ function collapseStream() {
 function expandStream() {
   streamPanel.value.open = true;
   streamPanel.value.hasEverOpened = true;
+}
+
+function resetStreamPanel() {
+  streamPanel.value.open = true;
+  streamPanel.value.stage = "调用中";
+  streamPanel.value.text = "";
+  streamPanel.value.done = false;
+  streamPanel.value.hasEverOpened = true;
+  streamPanel.value.draftId = "";
+  streamPanel.value.json = null;
+  streamPanel.value.edit = null;
+  streamPanel.value.userEdited = false;
+  streamPanel.value.parseError = "";
+  streamPanel.value.showRaw = false;
+}
+
+function cleanStreamJson(raw) {
+  let r = (raw || "").trim();
+  r = r.replace(/^```json\s*/i, "");
+  r = r.replace(/^```\s*/i, "");
+  r = r.replace(/\s*```$/i, "");
+  return r.trim();
+}
+
+function normalizeEditablePayload(payload) {
+  const sections = ["entities", "relations", "rules", "behaviors", "state_transitions"];
+  const out = {};
+  for (const key of sections) {
+    const list = Array.isArray(payload?.[key]) ? payload[key] : [];
+    out[key] = list.map((item, idx) => ({
+      __id: item?.id || item?.name || `${key}-${idx + 1}`,
+      __text: JSON.stringify(item || {}, null, 2),
+      __error: "",
+    }));
+  }
+  return out;
+}
+
+function tryParseStreamJson() {
+  const raw = cleanStreamJson(streamPanel.value.text || "");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    streamPanel.value.json = parsed;
+    streamPanel.value.parseError = "";
+    if (!streamPanel.value.userEdited) {
+      streamPanel.value.edit = normalizeEditablePayload(parsed);
+    }
+  } catch (e) {
+    streamPanel.value.parseError = "JSON 还未完整，继续解析中…";
+  }
+}
+
+function markStreamEdited(item) {
+  streamPanel.value.userEdited = true;
+  try {
+    JSON.parse(item.__text || "{}");
+    item.__error = "";
+  } catch {
+    item.__error = "JSON 格式错误";
+  }
+}
+
+function parseEditableSection(list) {
+  const parsed = [];
+  let hasError = false;
+  for (const item of list || []) {
+    try {
+      const obj = JSON.parse(item.__text || "{}");
+      parsed.push(obj);
+      item.__error = "";
+    } catch {
+      item.__error = "JSON 格式错误";
+      hasError = true;
+    }
+  }
+  return { parsed, hasError };
+}
+
+async function applyStreamEditsToDraft() {
+  if (!streamPanel.value.edit) return;
+  const draftId = streamPanel.value.draftId || props.draftId;
+  if (!draftId) {
+    toastError("未找到 draftId，无法同步编辑结果");
+    return;
+  }
+  const entitiesSection = parseEditableSection(streamPanel.value.edit.entities);
+  const relationsSection = parseEditableSection(streamPanel.value.edit.relations);
+  if (entitiesSection.hasError || relationsSection.hasError) {
+    toastError("存在 JSON 格式错误，请先修正后再同步");
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const nodeRequests = (entitiesSection.parsed || []).map((n) =>
+      fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/entities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: n.id || null,
+          name: n.name || "",
+          label: n.label || "Concept",
+          props: n.props || {},
+        }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+      })
+    );
+
+    const relRequests = (relationsSection.parsed || []).map((e) =>
+      fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/relations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: e.id || null,
+          src: e.src,
+          dst: e.dst,
+          type: e.type || "RELATED_TO",
+          props: e.props || {},
+        }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+      })
+    );
+
+    await Promise.all([...nodeRequests, ...relRequests]);
+    toastSuccess("已将编辑后的 JSON 同步到草稿");
+    await refresh();
+  } catch (e) {
+    toastError(`同步失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
 }
 
 const entities = ref([]);
@@ -657,7 +884,7 @@ async function extract() {
   fd.append("file", file.value);
   try {
     // 高级感：流式实时展示 DeepSeek 抽取过程（SSE over fetch stream）
-    streamPanel.value = { open: true, stage: "调用中", text: "", done: false, hasEverOpened: true };
+    resetStreamPanel();
     const res = await fetch(`${props.apiBase}/ontology/extract/stream`, { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
     if (!res.body) throw new Error("浏览器不支持流式读取");
@@ -686,10 +913,17 @@ async function extract() {
           streamPanel.value.stage = payload.message || payload.stage || "调用中";
         } else if (ev === "token") {
           streamPanel.value.text += payload.text || "";
+          tryParseStreamJson();
         } else if (ev === "done") {
           streamPanel.value.stage = "完成";
           streamPanel.value.done = true;
           streamPanel.value.hasEverOpened = true;
+          streamPanel.value.draftId = payload.draft_id || "";
+          if (!streamPanel.value.userEdited) {
+            streamPanel.value.json = payload;
+            streamPanel.value.edit = normalizeEditablePayload(payload);
+            streamPanel.value.parseError = "";
+          }
           emit("draft-created", payload.draft_id);
           toastSuccess(`草稿已生成：节点 ${(payload.nodes || []).length}，关系 ${(payload.edges || []).length}。`);
           // 拉取草稿数据刷新画布
@@ -1232,6 +1466,11 @@ watch(
   border-bottom: 1px solid rgba(148, 163, 184, 0.15);
   color: rgba(226, 232, 240, 0.9);
 }
+.stream-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 .stream-title {
   font-weight: 900;
 }
@@ -1247,6 +1486,70 @@ watch(
   padding: 10px 12px;
   white-space: pre-wrap;
   color: rgba(226, 232, 240, 0.85);
+}
+.stream-json {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 12px;
+}
+.json-hint {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+}
+.json-section {
+  border: 1px solid rgba(34, 211, 238, 0.16);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(6, 18, 42, 0.42);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.08);
+}
+.json-section-title {
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: rgba(226, 232, 240, 0.92);
+}
+.json-items {
+  display: grid;
+  gap: 10px;
+}
+.json-item {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(10, 26, 58, 0.45);
+  animation: jsonGlow 2.4s ease-in-out infinite;
+}
+.json-item-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: rgba(226, 232, 240, 0.8);
+}
+.json-error {
+  color: #fecaca;
+}
+.json-editor {
+  width: 100%;
+  min-height: 120px;
+  background: rgba(6, 18, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: rgba(226, 232, 240, 0.95);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+@keyframes jsonGlow {
+  0% {
+    box-shadow: 0 0 0 rgba(34, 211, 238, 0.0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.16);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(34, 211, 238, 0.0);
+  }
 }
 .stream-collapsed {
   display: flex;
