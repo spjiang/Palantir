@@ -1124,22 +1124,22 @@ watch(
 .panel-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  gap: 10px;
+  padding: 10px 12px; /* 更紧凑 */
+  border: 1px solid rgba(148, 163, 184, 0.20);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
   color: #e2e8f0;
 }
 .title {
   font-weight: 900;
-  font-size: 16px;
+  font-size: 15px;
 }
 .subtitle {
   color: rgba(226, 232, 240, 0.7);
@@ -1148,28 +1148,31 @@ watch(
 }
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: wrap;
 }
 .file {
-  width: 260px;
+  width: 220px;
 }
 .btn {
-  padding: 10px 12px;
+  padding: 7px 10px; /* 更紧凑 */
   border-radius: 10px;
   border: none;
-  background: #0ea5e9;
-  color: #fff;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.92), rgba(99, 102, 241, 0.88));
+  color: #08101f;
   cursor: pointer;
+  font-weight: 800;
+  font-size: 13px;
 }
 .btn.secondary {
-  background: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.12);
   color: #e2e8f0;
   border: 1px solid rgba(148, 163, 184, 0.35);
 }
 .btn.danger {
-  background: #ef4444;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.92), rgba(251, 113, 133, 0.82));
+  color: #12060a;
 }
 .btn:disabled {
   opacity: 0.6;
@@ -1246,22 +1249,22 @@ watch(
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
+  border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #000;
+  background: rgba(2, 6, 23, 0.42);
+  color: rgba(226, 232, 240, 0.9);
 }
 .stream-hint {
   font-size: 12px;
-  color: #000;
+  color: rgba(226, 232, 240, 0.72);
 }
 .stream-collapsed .btn.secondary {
-  color: #000;
-  border-color: rgba(15, 23, 42, 0.18);
-  background: rgba(15, 23, 42, 0.06);
+  color: rgba(226, 232, 240, 0.9);
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.10);
 }
 .btn.mini {
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 10px;
   font-size: 12px;
 }

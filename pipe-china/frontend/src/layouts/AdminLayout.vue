@@ -77,8 +77,8 @@ function isActiveLayer(key) {
 <style scoped>
 .admin {
   min-height: 100vh;
-  background: #f8fafc;
-  color: #0f172a;
+  background: transparent;
+  color: var(--text);
 }
 .topbar {
   height: 64px;
@@ -87,9 +87,10 @@ function isActiveLayer(key) {
   justify-content: space-between;
   gap: 14px;
   padding: 0 16px;
-  background: #0b1220;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.88), rgba(2, 6, 23, 0.72));
   color: #e2e8f0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
 }
 .brand {
   display: flex;
@@ -114,16 +115,17 @@ function isActiveLayer(key) {
 .nav-item {
   white-space: nowrap;
   text-decoration: none;
-  color: rgba(226, 232, 240, 0.85);
-  padding: 8px 10px;
+  color: rgba(226, 232, 240, 0.88);
+  padding: 7px 10px; /* 更紧凑 */
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.06);
 }
 .nav-item.active {
-  background: #0ea5e9;
-  border-color: #0ea5e9;
-  color: #fff;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.22), rgba(99, 102, 241, 0.18));
+  border-color: rgba(34, 211, 238, 0.55);
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12);
 }
 .api {
   display: flex;
@@ -153,10 +155,11 @@ function isActiveLayer(key) {
   min-height: calc(100vh - 64px);
 }
 .sidebar {
-  background: #0f172a;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.72), rgba(2, 6, 23, 0.55));
   color: rgba(226, 232, 240, 0.92);
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  padding: 14px 12px;
+  border-right: 1px solid var(--border);
+  padding: 12px 10px; /* 更紧凑 */
+  backdrop-filter: blur(10px);
 }
 .side-title {
   font-weight: 900;
@@ -170,18 +173,18 @@ function isActiveLayer(key) {
 .side-item {
   text-decoration: none;
   color: rgba(226, 232, 240, 0.85);
-  padding: 10px 10px;
+  padding: 9px 10px; /* 更紧凑 */
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.12);
   background: rgba(148, 163, 184, 0.06);
 }
 .side-item.router-link-active {
-  background: rgba(14, 165, 233, 0.18);
-  border-color: rgba(14, 165, 233, 0.55);
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.14), rgba(99, 102, 241, 0.12));
+  border-color: rgba(34, 211, 238, 0.45);
   color: #fff;
 }
 .content {
-  padding: 16px;
+  padding: 12px; /* 更紧凑 */
   overflow: auto;
 }
 </style>
