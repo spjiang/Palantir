@@ -66,188 +66,56 @@
       <div class="stream-json" v-if="streamPanel.edit">
         <div v-if="streamPanel.parseError" class="json-hint">{{ streamPanel.parseError }}</div>
 
-        <div class="json-section" v-if="streamPanel.edit.entities?.length">
-          <div class="json-section-title">entities（实体）</div>
-          <div class="json-items">
-            <div class="json-item" v-for="(it, idx) in streamPanel.edit.entities" :key="it.__id">
-              <div class="json-item-head">
-                实体 {{ idx + 1 }}
-                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
-              </div>
-              <div class="json-actions">
-                <button class="btn danger mini" @click="deleteStreamItem('entities', it)">删除</button>
-              </div>
-              <div class="json-fields">
-                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
-                  <label class="json-key">{{ key }}</label>
-                  <input
-                    v-if="!isObjectValue(val)"
-                    :value="val"
-                    @input="updateStreamField(it, key, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="json-editor mono"
-                    rows="4"
-                    :value="formatJsonValue(val)"
-                    @input="updateStreamFieldJson(it, key, $event.target.value)"
-                  ></textarea>
-                </div>
-                <div class="json-add">
-                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
-                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
-                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="json-section" v-if="streamPanel.edit.relations?.length">
-          <div class="json-section-title">relations（关系）</div>
-          <div class="json-items">
-            <div class="json-item" v-for="(it, idx) in streamPanel.edit.relations" :key="it.__id">
-              <div class="json-item-head">
-                关系 {{ idx + 1 }}
-                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
-              </div>
-              <div class="json-actions">
-                <button class="btn danger mini" @click="deleteStreamItem('relations', it)">删除</button>
-              </div>
-              <div class="json-fields">
-                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
-                  <label class="json-key">{{ key }}</label>
-                  <input
-                    v-if="!isObjectValue(val)"
-                    :value="val"
-                    @input="updateStreamField(it, key, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="json-editor mono"
-                    rows="4"
-                    :value="formatJsonValue(val)"
-                    @input="updateStreamFieldJson(it, key, $event.target.value)"
-                  ></textarea>
-                </div>
-                <div class="json-add">
-                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
-                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
-                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="json-section" v-if="streamPanel.edit.rules?.length">
-          <div class="json-section-title">rules（规则）</div>
-          <div class="json-items">
-            <div class="json-item" v-for="(it, idx) in streamPanel.edit.rules" :key="it.__id">
-              <div class="json-item-head">
-                规则 {{ idx + 1 }}
-                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
-              </div>
-              <div class="json-actions">
-                <button class="btn danger mini" @click="deleteStreamItem('rules', it)">删除</button>
-              </div>
-              <div class="json-fields">
-                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
-                  <label class="json-key">{{ key }}</label>
-                  <input
-                    v-if="!isObjectValue(val)"
-                    :value="val"
-                    @input="updateStreamField(it, key, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="json-editor mono"
-                    rows="4"
-                    :value="formatJsonValue(val)"
-                    @input="updateStreamFieldJson(it, key, $event.target.value)"
-                  ></textarea>
-                </div>
-                <div class="json-add">
-                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
-                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
-                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="json-section" v-if="streamPanel.edit.behaviors?.length">
-          <div class="json-section-title">behaviors（行为）</div>
-          <div class="json-items">
-            <div class="json-item" v-for="(it, idx) in streamPanel.edit.behaviors" :key="it.__id">
-              <div class="json-item-head">
-                行为 {{ idx + 1 }}
-                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
-              </div>
-              <div class="json-actions">
-                <button class="btn danger mini" @click="deleteStreamItem('behaviors', it)">删除</button>
-              </div>
-              <div class="json-fields">
-                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
-                  <label class="json-key">{{ key }}</label>
-                  <input
-                    v-if="!isObjectValue(val)"
-                    :value="val"
-                    @input="updateStreamField(it, key, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="json-editor mono"
-                    rows="4"
-                    :value="formatJsonValue(val)"
-                    @input="updateStreamFieldJson(it, key, $event.target.value)"
-                  ></textarea>
-                </div>
-                <div class="json-add">
-                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
-                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
-                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="json-section" v-if="streamPanel.edit.state_transitions?.length">
-          <div class="json-section-title">state_transitions（状态迁移）</div>
-          <div class="json-items">
-            <div class="json-item" v-for="(it, idx) in streamPanel.edit.state_transitions" :key="it.__id">
-              <div class="json-item-head">
-                迁移 {{ idx + 1 }}
-                <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
-              </div>
-              <div class="json-actions">
-                <button class="btn danger mini" @click="deleteStreamItem('state_transitions', it)">删除</button>
-              </div>
-              <div class="json-fields">
-                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
-                  <label class="json-key">{{ key }}</label>
-                  <input
-                    v-if="!isObjectValue(val)"
-                    :value="val"
-                    @input="updateStreamField(it, key, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="json-editor mono"
-                    rows="4"
-                    :value="formatJsonValue(val)"
-                    @input="updateStreamFieldJson(it, key, $event.target.value)"
-                  ></textarea>
-                </div>
-                <div class="json-add">
-                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
-                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
-                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
-                </div>
-              </div>
-            </div>
+        <div
+          class="json-section"
+          v-for="section in streamSections"
+          :key="section.key"
+          v-if="(streamPanel.edit?.[section.key]?.length || 0) > 0"
+        >
+          <div class="json-section-title">{{ section.title }}</div>
+          <div class="json-table-wrap">
+            <table class="json-table">
+              <thead>
+                <tr>
+                  <th v-for="col in getSectionColumns(section.key)" :key="col">{{ col }}</th>
+                  <th class="json-col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="it in streamPanel.edit[section.key]" :key="it.__id">
+                  <td v-for="col in getSectionColumns(section.key)" :key="col">
+                    <template v-if="it.__editing">
+                      <textarea
+                        v-if="isObjectValue(it.__editValues?.[col])"
+                        class="json-cell-input mono"
+                        rows="3"
+                        :value="formatJsonValue(it.__editValues?.[col])"
+                        @input="updateRowFieldJson(it, col, $event.target.value)"
+                      ></textarea>
+                      <input
+                        v-else
+                        class="json-cell-input"
+                        :value="it.__editValues?.[col]"
+                        @input="updateRowField(it, col, $event.target.value)"
+                      />
+                    </template>
+                    <template v-else>
+                      <span class="json-cell-text">{{ formatCell(it.__obj?.[col]) }}</span>
+                    </template>
+                  </td>
+                  <td class="json-actions-col">
+                    <template v-if="it.__editing">
+                      <button class="btn mini" @click="saveEditRow(it)">保存</button>
+                      <button class="btn secondary mini" @click="cancelEditRow(it)">取消</button>
+                    </template>
+                    <template v-else>
+                      <button class="btn secondary mini" @click="startEditRow(it)">编辑</button>
+                    </template>
+                    <button class="btn danger mini" @click="deleteStreamItem(section.key, it)">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -559,6 +427,7 @@ const streamPanel = ref({
   generatedJson: "",
   partial: null,
   seen: null,
+  pendingClear: false,
 });
 
 function collapseStream() {
@@ -571,6 +440,7 @@ function expandStream() {
 }
 
 function resetStreamPanel() {
+  // 仅当“二次上传”开始时清理；在首个 token 到来前保留旧数据展示
   streamPanel.value.open = true;
   streamPanel.value.stage = "调用中";
   streamPanel.value.text = "";
@@ -578,18 +448,10 @@ function resetStreamPanel() {
   streamPanel.value.hasEverOpened = true;
   streamPanel.value.draftId = "";
   streamPanel.value.json = null;
-  streamPanel.value.edit = {
-    entities: [],
-    relations: [],
-    rules: [],
-    behaviors: [],
-    state_transitions: [],
-  };
   streamPanel.value.userEdited = false;
   streamPanel.value.parseError = "";
   streamPanel.value.showRaw = false;
   streamPanel.value.showGenerated = false;
-  streamPanel.value.generatedJson = "";
   streamPanel.value.partial = {
     entities: { scanPos: 0 },
     relations: { scanPos: 0 },
@@ -604,6 +466,18 @@ function resetStreamPanel() {
     behaviors: new Set(),
     state_transitions: new Set(),
   };
+  streamPanel.value.pendingClear = true;
+}
+
+function clearStreamEdits() {
+  streamPanel.value.edit = {
+    entities: [],
+    relations: [],
+    rules: [],
+    behaviors: [],
+    state_transitions: [],
+  };
+  streamPanel.value.generatedJson = "";
 }
 
 function cleanStreamJson(raw) {
@@ -625,6 +499,8 @@ function normalizeEditablePayload(payload) {
       __text: JSON.stringify(item || {}, null, 2),
       __newKey: "",
       __newVal: "",
+      __editing: false,
+      __editValues: JSON.parse(JSON.stringify(item || {})),
       __error: "",
     }));
   }
@@ -719,6 +595,8 @@ function appendStreamObjects(sectionKey, items) {
       __text: JSON.stringify(it.obj || {}, null, 2),
       __newKey: "",
       __newVal: "",
+      __editing: false,
+      __editValues: JSON.parse(JSON.stringify(it.obj || {})),
       __error: "",
     });
   }
@@ -762,6 +640,76 @@ function formatJsonValue(v) {
     return JSON.stringify(v, null, 2);
   } catch {
     return String(v ?? "");
+  }
+}
+
+const streamSections = [
+  { key: "entities", title: "实体列表" },
+  { key: "relations", title: "关系列表" },
+  { key: "rules", title: "规则列表" },
+  { key: "behaviors", title: "行为列表" },
+  { key: "state_transitions", title: "状态迁移列表" },
+];
+
+function getSectionColumns(sectionKey) {
+  const list = streamPanel.value.edit?.[sectionKey] || [];
+  const preferred = {
+    entities: ["name", "label", "props", "id"],
+    relations: ["src", "dst", "type", "props", "id"],
+    rules: ["name", "trigger", "action", "approval_required", "required_evidence"],
+    behaviors: ["name", "preconditions", "inputs", "outputs", "effects"],
+    state_transitions: ["object", "from", "to", "via"],
+  };
+  const order = preferred[sectionKey] || [];
+  const keys = new Set();
+  for (const it of list) {
+    Object.keys(it.__obj || {}).forEach((k) => keys.add(k));
+  }
+  const rest = [...keys].filter((k) => !order.includes(k));
+  return [...order.filter((k) => keys.has(k)), ...rest];
+}
+
+function formatCell(val) {
+  if (val === null || val === undefined) return "";
+  if (typeof val === "object") return JSON.stringify(val);
+  return String(val);
+}
+
+function startEditRow(item) {
+  item.__editing = true;
+  item.__editValues = JSON.parse(JSON.stringify(item.__obj || {}));
+}
+
+function cancelEditRow(item) {
+  item.__editing = false;
+  item.__editValues = JSON.parse(JSON.stringify(item.__obj || {}));
+}
+
+function saveEditRow(item) {
+  item.__obj = JSON.parse(JSON.stringify(item.__editValues || {}));
+  item.__editing = false;
+  item.__error = "";
+  updateItemTextFromObj(item);
+}
+
+function updateRowField(item, key, rawVal) {
+  const current = item.__editValues?.[key];
+  let next = rawVal;
+  if (typeof current === "number") {
+    const num = Number(rawVal);
+    next = Number.isNaN(num) ? rawVal : num;
+  } else if (typeof current === "boolean") {
+    next = rawVal === "true" || rawVal === true;
+  }
+  item.__editValues[key] = next;
+}
+
+function updateRowFieldJson(item, key, rawVal) {
+  try {
+    item.__editValues[key] = rawVal ? JSON.parse(rawVal) : {};
+    item.__error = "";
+  } catch {
+    item.__error = "字段 JSON 格式错误";
   }
 }
 
@@ -1246,6 +1194,10 @@ async function extract() {
         if (ev === "status") {
           streamPanel.value.stage = payload.message || payload.stage || "调用中";
         } else if (ev === "token") {
+          if (streamPanel.value.pendingClear) {
+            clearStreamEdits();
+            streamPanel.value.pendingClear = false;
+          }
           streamPanel.value.text += payload.text || "";
           processStreamIncremental();
           tryParseStreamJson();
@@ -1842,89 +1794,56 @@ watch(
   margin-bottom: 8px;
   color: rgba(226, 232, 240, 0.92);
 }
-.json-items {
-  display: grid;
-  gap: 10px;
-}
-.json-item {
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(10, 26, 58, 0.45);
-  animation: jsonGlow 2.4s ease-in-out infinite;
-}
-.json-fields {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-}
-.json-field {
-  display: grid;
-  gap: 4px;
-}
-.json-key {
-  font-size: 12px;
-  color: rgba(226, 232, 240, 0.78);
-}
-.json-add {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 6px;
-  margin-top: 6px;
-}
-.json-add-key,
-.json-add-val {
+.json-table-wrap {
   width: 100%;
+  overflow: auto;
 }
-.json-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.json-preview {
-  flex: 1;
+.json-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
-  color: rgba(226, 232, 240, 0.85);
+  color: rgba(226, 232, 240, 0.9);
+}
+.json-table th,
+.json-table td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.json-table th {
+  color: rgba(226, 232, 240, 0.75);
+  font-weight: 800;
+  background: rgba(10, 26, 58, 0.5);
+}
+.json-col-actions,
+.json-actions-col {
+  width: 140px;
   white-space: nowrap;
+}
+.json-cell-text {
+  display: inline-block;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.json-cell-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(6, 18, 42, 0.4);
+  color: rgba(226, 232, 240, 0.95);
+  box-sizing: border-box;
 }
 .json-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
-}
-.json-item-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 6px;
-  color: rgba(226, 232, 240, 0.8);
 }
 .json-error {
   color: #fecaca;
-}
-.json-editor {
-  width: 100%;
-  min-height: 120px;
-  background: rgba(6, 18, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  color: rgba(226, 232, 240, 0.95);
-  border-radius: 8px;
-  padding: 8px 10px;
-  box-sizing: border-box;
-}
-@keyframes jsonGlow {
-  0% {
-    box-shadow: 0 0 0 rgba(34, 211, 238, 0.0);
-  }
-  50% {
-    box-shadow: 0 0 18px rgba(34, 211, 238, 0.16);
-  }
-  100% {
-    box-shadow: 0 0 0 rgba(34, 211, 238, 0.0);
-  }
 }
 .stream-collapsed {
   display: flex;
