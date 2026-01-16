@@ -44,14 +44,25 @@
           >
             {{ streamPanel.showRaw ? "隐藏原始 JSON" : "显示原始 JSON" }}
           </button>
+          <button
+            v-if="streamPanel.edit"
+            class="btn secondary mini"
+            :disabled="loading"
+            @click="streamPanel.showGenerated = !streamPanel.showGenerated"
+          >
+            {{ streamPanel.showGenerated ? "隐藏完整 JSON" : "显示完整 JSON" }}
+          </button>
           <button v-if="streamPanel.edit" class="btn mini" :disabled="loading" @click="applyStreamEditsToDraft">
-            同步到草稿
+            确认入库（草稿图谱）
           </button>
           <button class="btn secondary mini" @click="collapseStream">收起</button>
         </div>
       </div>
       <div v-if="streamPanel.showRaw" class="stream-body mono">
         {{ streamPanel.text || "（等待模型返回…）" }}<span v-if="loading" class="cursor">▍</span>
+      </div>
+      <div v-if="streamPanel.showGenerated" class="stream-body mono">
+        {{ streamPanel.generatedJson || "（等待生成完整 JSON…）" }}
       </div>
       <div class="stream-json" v-if="streamPanel.edit">
         <div v-if="streamPanel.parseError" class="json-hint">{{ streamPanel.parseError }}</div>
@@ -64,7 +75,14 @@
                 实体 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+              <div class="json-row">
+                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
+                <div class="json-actions">
+                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
+                  <button class="btn danger mini" @click="deleteStreamItem('entities', it)">删除</button>
+                </div>
+              </div>
+              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -77,7 +95,14 @@
                 关系 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+              <div class="json-row">
+                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
+                <div class="json-actions">
+                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
+                  <button class="btn danger mini" @click="deleteStreamItem('relations', it)">删除</button>
+                </div>
+              </div>
+              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -90,7 +115,14 @@
                 规则 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+              <div class="json-row">
+                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
+                <div class="json-actions">
+                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
+                  <button class="btn danger mini" @click="deleteStreamItem('rules', it)">删除</button>
+                </div>
+              </div>
+              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -103,7 +135,14 @@
                 行为 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+              <div class="json-row">
+                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
+                <div class="json-actions">
+                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
+                  <button class="btn danger mini" @click="deleteStreamItem('behaviors', it)">删除</button>
+                </div>
+              </div>
+              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -116,7 +155,14 @@
                 迁移 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <textarea class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
+              <div class="json-row">
+                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
+                <div class="json-actions">
+                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
+                  <button class="btn danger mini" @click="deleteStreamItem('state_transitions', it)">删除</button>
+                </div>
+              </div>
+              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -432,6 +478,8 @@ const streamPanel = ref({
   userEdited: false,
   parseError: "",
   showRaw: false,
+  showGenerated: false,
+  generatedJson: "",
 });
 
 function collapseStream() {
@@ -455,6 +503,8 @@ function resetStreamPanel() {
   streamPanel.value.userEdited = false;
   streamPanel.value.parseError = "";
   streamPanel.value.showRaw = false;
+  streamPanel.value.showGenerated = false;
+  streamPanel.value.generatedJson = "";
 }
 
 function cleanStreamJson(raw) {
@@ -473,6 +523,7 @@ function normalizeEditablePayload(payload) {
     out[key] = list.map((item, idx) => ({
       __id: item?.id || item?.name || `${key}-${idx + 1}`,
       __text: JSON.stringify(item || {}, null, 2),
+      __editing: false,
       __error: "",
     }));
   }
@@ -502,6 +553,7 @@ function markStreamEdited(item) {
   } catch {
     item.__error = "JSON 格式错误";
   }
+  updateGeneratedJson();
 }
 
 function parseEditableSection(list) {
@@ -518,6 +570,45 @@ function parseEditableSection(list) {
     }
   }
   return { parsed, hasError };
+}
+
+function buildFullJsonFromEdits() {
+  if (!streamPanel.value.edit) return {};
+  const parseSection = (list) => {
+    const arr = [];
+    for (const item of list || []) {
+      try {
+        arr.push(JSON.parse(item.__text || "{}"));
+      } catch {
+        // ignore parse error here; validation happens before apply
+      }
+    }
+    return arr;
+  };
+  return {
+    entities: parseSection(streamPanel.value.edit.entities),
+    relations: parseSection(streamPanel.value.edit.relations),
+    rules: parseSection(streamPanel.value.edit.rules),
+    behaviors: parseSection(streamPanel.value.edit.behaviors),
+    state_transitions: parseSection(streamPanel.value.edit.state_transitions),
+  };
+}
+
+function updateGeneratedJson() {
+  const obj = buildFullJsonFromEdits();
+  streamPanel.value.generatedJson = JSON.stringify(obj, null, 2);
+}
+
+function toggleStreamEdit(item) {
+  item.__editing = !item.__editing;
+}
+
+function deleteStreamItem(sectionKey, item) {
+  streamPanel.value.userEdited = true;
+  const list = streamPanel.value.edit?.[sectionKey] || [];
+  const idx = list.indexOf(item);
+  if (idx >= 0) list.splice(idx, 1);
+  updateGeneratedJson();
 }
 
 async function applyStreamEditsToDraft() {
@@ -923,6 +1014,7 @@ async function extract() {
             streamPanel.value.json = payload;
             streamPanel.value.edit = normalizeEditablePayload(payload);
             streamPanel.value.parseError = "";
+            updateGeneratedJson();
           }
           emit("draft-created", payload.draft_id);
           toastSuccess(`草稿已生成：节点 ${(payload.nodes || []).length}，关系 ${(payload.edges || []).length}。`);
@@ -1519,6 +1611,25 @@ watch(
   padding: 8px;
   background: rgba(10, 26, 58, 0.45);
   animation: jsonGlow 2.4s ease-in-out infinite;
+}
+.json-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.json-preview {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.json-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .json-item-head {
   display: flex;
