@@ -75,14 +75,31 @@
                 实体 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <div class="json-row">
-                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
-                <div class="json-actions">
-                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
-                  <button class="btn danger mini" @click="deleteStreamItem('entities', it)">删除</button>
+              <div class="json-actions">
+                <button class="btn danger mini" @click="deleteStreamItem('entities', it)">删除</button>
+              </div>
+              <div class="json-fields">
+                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
+                  <label class="json-key">{{ key }}</label>
+                  <input
+                    v-if="!isObjectValue(val)"
+                    :value="val"
+                    @input="updateStreamField(it, key, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="json-editor mono"
+                    rows="4"
+                    :value="formatJsonValue(val)"
+                    @input="updateStreamFieldJson(it, key, $event.target.value)"
+                  ></textarea>
+                </div>
+                <div class="json-add">
+                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
+                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
+                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
                 </div>
               </div>
-              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -95,14 +112,31 @@
                 关系 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <div class="json-row">
-                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
-                <div class="json-actions">
-                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
-                  <button class="btn danger mini" @click="deleteStreamItem('relations', it)">删除</button>
+              <div class="json-actions">
+                <button class="btn danger mini" @click="deleteStreamItem('relations', it)">删除</button>
+              </div>
+              <div class="json-fields">
+                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
+                  <label class="json-key">{{ key }}</label>
+                  <input
+                    v-if="!isObjectValue(val)"
+                    :value="val"
+                    @input="updateStreamField(it, key, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="json-editor mono"
+                    rows="4"
+                    :value="formatJsonValue(val)"
+                    @input="updateStreamFieldJson(it, key, $event.target.value)"
+                  ></textarea>
+                </div>
+                <div class="json-add">
+                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
+                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
+                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
                 </div>
               </div>
-              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -115,14 +149,31 @@
                 规则 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <div class="json-row">
-                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
-                <div class="json-actions">
-                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
-                  <button class="btn danger mini" @click="deleteStreamItem('rules', it)">删除</button>
+              <div class="json-actions">
+                <button class="btn danger mini" @click="deleteStreamItem('rules', it)">删除</button>
+              </div>
+              <div class="json-fields">
+                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
+                  <label class="json-key">{{ key }}</label>
+                  <input
+                    v-if="!isObjectValue(val)"
+                    :value="val"
+                    @input="updateStreamField(it, key, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="json-editor mono"
+                    rows="4"
+                    :value="formatJsonValue(val)"
+                    @input="updateStreamFieldJson(it, key, $event.target.value)"
+                  ></textarea>
+                </div>
+                <div class="json-add">
+                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
+                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
+                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
                 </div>
               </div>
-              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -135,14 +186,31 @@
                 行为 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <div class="json-row">
-                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
-                <div class="json-actions">
-                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
-                  <button class="btn danger mini" @click="deleteStreamItem('behaviors', it)">删除</button>
+              <div class="json-actions">
+                <button class="btn danger mini" @click="deleteStreamItem('behaviors', it)">删除</button>
+              </div>
+              <div class="json-fields">
+                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
+                  <label class="json-key">{{ key }}</label>
+                  <input
+                    v-if="!isObjectValue(val)"
+                    :value="val"
+                    @input="updateStreamField(it, key, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="json-editor mono"
+                    rows="4"
+                    :value="formatJsonValue(val)"
+                    @input="updateStreamFieldJson(it, key, $event.target.value)"
+                  ></textarea>
+                </div>
+                <div class="json-add">
+                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
+                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
+                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
                 </div>
               </div>
-              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -155,14 +223,31 @@
                 迁移 {{ idx + 1 }}
                 <span v-if="it.__error" class="json-error">{{ it.__error }}</span>
               </div>
-              <div class="json-row">
-                <div class="json-preview mono">{{ it.__text.split("\n")[0] || "{}" }}</div>
-                <div class="json-actions">
-                  <button class="btn secondary mini" @click="toggleStreamEdit(it)">{{ it.__editing ? "收起" : "编辑" }}</button>
-                  <button class="btn danger mini" @click="deleteStreamItem('state_transitions', it)">删除</button>
+              <div class="json-actions">
+                <button class="btn danger mini" @click="deleteStreamItem('state_transitions', it)">删除</button>
+              </div>
+              <div class="json-fields">
+                <div class="json-field" v-for="(val, key) in it.__obj" :key="key">
+                  <label class="json-key">{{ key }}</label>
+                  <input
+                    v-if="!isObjectValue(val)"
+                    :value="val"
+                    @input="updateStreamField(it, key, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="json-editor mono"
+                    rows="4"
+                    :value="formatJsonValue(val)"
+                    @input="updateStreamFieldJson(it, key, $event.target.value)"
+                  ></textarea>
+                </div>
+                <div class="json-add">
+                  <input class="json-add-key" v-model="it.__newKey" placeholder="新增字段名" />
+                  <input class="json-add-val" v-model="it.__newVal" placeholder="新增字段值" />
+                  <button class="btn secondary mini" @click="addStreamField(it)">添加</button>
                 </div>
               </div>
-              <textarea v-if="it.__editing" class="json-editor mono" rows="6" v-model="it.__text" @input="markStreamEdited(it)"></textarea>
             </div>
           </div>
         </div>
@@ -522,8 +607,10 @@ function normalizeEditablePayload(payload) {
     const list = Array.isArray(payload?.[key]) ? payload[key] : [];
     out[key] = list.map((item, idx) => ({
       __id: item?.id || item?.name || `${key}-${idx + 1}`,
+      __obj: JSON.parse(JSON.stringify(item || {})),
       __text: JSON.stringify(item || {}, null, 2),
-      __editing: false,
+      __newKey: "",
+      __newVal: "",
       __error: "",
     }));
   }
@@ -545,6 +632,11 @@ function tryParseStreamJson() {
   }
 }
 
+function updateItemTextFromObj(item) {
+  item.__text = JSON.stringify(item.__obj || {}, null, 2);
+  updateGeneratedJson();
+}
+
 function markStreamEdited(item) {
   streamPanel.value.userEdited = true;
   try {
@@ -554,6 +646,53 @@ function markStreamEdited(item) {
     item.__error = "JSON 格式错误";
   }
   updateGeneratedJson();
+}
+
+function isObjectValue(v) {
+  return v && typeof v === "object";
+}
+
+function formatJsonValue(v) {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v ?? "");
+  }
+}
+
+function updateStreamField(item, key, rawVal) {
+  const current = item.__obj?.[key];
+  let next = rawVal;
+  if (typeof current === "number") {
+    const num = Number(rawVal);
+    next = Number.isNaN(num) ? rawVal : num;
+  } else if (typeof current === "boolean") {
+    next = rawVal === "true" || rawVal === true;
+  }
+  item.__obj[key] = next;
+  item.__error = "";
+  updateItemTextFromObj(item);
+}
+
+function updateStreamFieldJson(item, key, rawVal) {
+  try {
+    const parsed = rawVal ? JSON.parse(rawVal) : {};
+    item.__obj[key] = parsed;
+    item.__error = "";
+    updateItemTextFromObj(item);
+  } catch {
+    item.__error = "字段 JSON 格式错误";
+  }
+}
+
+function addStreamField(item) {
+  const k = (item.__newKey || "").trim();
+  if (!k) return;
+  item.__obj[k] = item.__newVal || "";
+  item.__newKey = "";
+  item.__newVal = "";
+  item.__error = "";
+  updateItemTextFromObj(item);
 }
 
 function parseEditableSection(list) {
@@ -599,10 +738,6 @@ function updateGeneratedJson() {
   streamPanel.value.generatedJson = JSON.stringify(obj, null, 2);
 }
 
-function toggleStreamEdit(item) {
-  item.__editing = !item.__editing;
-}
-
 function deleteStreamItem(sectionKey, item) {
   streamPanel.value.userEdited = true;
   const list = streamPanel.value.edit?.[sectionKey] || [];
@@ -627,6 +762,9 @@ async function applyStreamEditsToDraft() {
 
   loading.value = true;
   try {
+    if (!props.draftId && streamPanel.value.draftId) {
+      emit("draft-created", streamPanel.value.draftId);
+    }
     const nodeRequests = (entitiesSection.parsed || []).map((n) =>
       fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/entities`, {
         method: "POST",
@@ -1016,10 +1154,7 @@ async function extract() {
             streamPanel.value.parseError = "";
             updateGeneratedJson();
           }
-          emit("draft-created", payload.draft_id);
-          toastSuccess(`草稿已生成：节点 ${(payload.nodes || []).length}，关系 ${(payload.edges || []).length}。`);
-          // 拉取草稿数据刷新画布
-          await refresh();
+          toastSuccess("抽取完成：请在下方编辑后点击“确认入库（草稿图谱）”。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
         }
@@ -1611,6 +1746,29 @@ watch(
   padding: 8px;
   background: rgba(10, 26, 58, 0.45);
   animation: jsonGlow 2.4s ease-in-out infinite;
+}
+.json-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.json-field {
+  display: grid;
+  gap: 4px;
+}
+.json-key {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.78);
+}
+.json-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  margin-top: 6px;
+}
+.json-add-key,
+.json-add-val {
+  width: 100%;
 }
 .json-row {
   display: flex;
