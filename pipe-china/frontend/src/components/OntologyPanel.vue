@@ -30,8 +30,8 @@
       <span class="st">对象 {{ stats.objects }}</span>
       <span class="st">关系 {{ stats.totalEdges }}</span>
     </div>
-    <!-- 抽取流式面板：可收起/展开 -->
-    <div v-if="streamPanel.open" class="stream">
+    <!-- 抽取流式面板：始终显示（不隐藏） -->
+    <div class="stream">
       <div class="stream-head">
         <div class="stream-title">实时抽取（DeepSeek 流式）</div>
         <div class="stream-stage">{{ streamPanel.stage }}</div>
@@ -55,7 +55,6 @@
           <button v-if="streamPanel.edit" class="btn mini" :disabled="loading" @click="applyStreamEditsToDraft">
             确认入库（草稿图谱）
           </button>
-          <button class="btn secondary mini" @click="collapseStream">收起</button>
         </div>
       </div>
       <div v-if="streamPanel.showRaw" class="stream-body mono">
@@ -252,13 +251,6 @@
           </div>
         </div>
       </div>
-    </div>
-    <div v-else-if="streamPanel.hasEverOpened" class="stream-collapsed">
-      <button class="btn secondary mini" @click="expandStream">
-        展开实时抽取<span v-if="streamPanel.stage">（{{ streamPanel.stage }}）</span>
-      </button>
-      <span class="stream-hint" v-if="loading">正在抽取中…</span>
-      <span class="stream-hint" v-else-if="streamPanel.text">已记录抽取内容，可展开查看</span>
     </div>
 
     <div class="body">
