@@ -1297,80 +1297,81 @@ function buildCy(nodes, edges) {
     })),
     ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type, props: e.props || {} } })),
   ];
+  const styleDef = [
+    {
+      selector: "node",
+      style: {
+        "background-color": "#6366f1",
+        // 始终用 displayName（name 为空时兜底为 id）
+        label: "data(displayName)",
+        color: "#e2e8f0",
+        "text-outline-color": "#0b1220",
+        "text-outline-width": 3,
+        "font-size": 12,
+        "text-valign": "center",
+        "text-halign": "center",
+        width: 42,
+        height: 42,
+        "border-width": 1,
+        "border-color": "rgba(148,163,184,0.35)",
+      },
+    },
+    {
+      selector: 'node[label = "Rule"]',
+      style: { "background-color": "#f59e0b" },
+    },
+    {
+      selector: 'node[label = "规则"]',
+      style: { "background-color": "#f59e0b" },
+    },
+    {
+      selector: 'node[label = "Behavior"]',
+      style: { "background-color": "#22c55e" },
+    },
+    {
+      selector: 'node[label = "行为"]',
+      style: { "background-color": "#22c55e" },
+    },
+    {
+      selector: 'node[label = "State"]',
+      style: { "background-color": "#38bdf8" },
+    },
+    {
+      selector: 'node[label = "状态"]',
+      style: { "background-color": "#38bdf8" },
+    },
+    {
+      selector: 'node[label = "Evidence"], node[label = "Artifact"]',
+      style: { "background-color": "#a855f7" },
+    },
+    {
+      selector: 'node[label = "证据"], node[label = "产物"]',
+      style: { "background-color": "#a855f7" },
+    },
+    {
+      selector: "edge",
+      style: {
+        width: 2,
+        "line-color": "rgba(148,163,184,0.65)",
+        "target-arrow-color": "rgba(148,163,184,0.75)",
+        "target-arrow-shape": "triangle",
+        "curve-style": "bezier",
+        label: "data(type)",
+        "font-size": 10,
+        color: "#e2e8f0",
+        "text-outline-color": "#0b1220",
+        "text-outline-width": 3,
+      },
+    },
+    { selector: ".selected", style: { "border-width": 3, "border-color": "#22c55e" } },
+    { selector: "edge.selected", style: { "line-color": "#22c55e", "target-arrow-color": "#22c55e", width: 3 } },
+  ];
 
   if (!cy.value) {
     cy.value = cytoscape({
       container: cyEl.value,
       elements,
-      style: [
-        {
-          selector: "node",
-          style: {
-            "background-color": "#6366f1",
-            // 动态流式生成时，部分节点 name 可能为空；用 displayName 兜底为 id，保证始终有文字
-            label: "data(displayName)",
-            color: "#e2e8f0",
-            "text-outline-color": "#0b1220",
-            "text-outline-width": 3,
-            "font-size": 12,
-            "text-valign": "center",
-            "text-halign": "center",
-            width: 42,
-            height: 42,
-            "border-width": 1,
-            "border-color": "rgba(148,163,184,0.35)",
-          },
-        },
-        {
-          selector: 'node[label = "Rule"]',
-          style: { "background-color": "#f59e0b" },
-        },
-        {
-          selector: 'node[label = "规则"]',
-          style: { "background-color": "#f59e0b" },
-        },
-        {
-          selector: 'node[label = "Behavior"]',
-          style: { "background-color": "#22c55e" },
-        },
-        {
-          selector: 'node[label = "行为"]',
-          style: { "background-color": "#22c55e" },
-        },
-        {
-          selector: 'node[label = "State"]',
-          style: { "background-color": "#38bdf8" },
-        },
-        {
-          selector: 'node[label = "状态"]',
-          style: { "background-color": "#38bdf8" },
-        },
-        {
-          selector: 'node[label = "Evidence"], node[label = "Artifact"]',
-          style: { "background-color": "#a855f7" },
-        },
-        {
-          selector: 'node[label = "证据"], node[label = "产物"]',
-          style: { "background-color": "#a855f7" },
-        },
-        {
-          selector: "edge",
-          style: {
-            width: 2,
-            "line-color": "rgba(148,163,184,0.65)",
-            "target-arrow-color": "rgba(148,163,184,0.75)",
-            "target-arrow-shape": "triangle",
-            "curve-style": "bezier",
-            label: "data(type)",
-            "font-size": 10,
-            color: "#e2e8f0",
-            "text-outline-color": "#0b1220",
-            "text-outline-width": 3,
-          },
-        },
-        { selector: ".selected", style: { "border-width": 3, "border-color": "#22c55e" } },
-        { selector: "edge.selected", style: { "line-color": "#22c55e", "target-arrow-color": "#22c55e", width: 3 } },
-      ],
+      style: styleDef,
       layout: { name: "fcose", quality: "default", animate: true },
     });
 
@@ -1407,6 +1408,13 @@ function buildCy(nodes, edges) {
   } else {
     cy.value.elements().remove();
     cy.value.add(elements);
+    // 关键：cy 已存在时也要刷新 style（否则还是旧的 label:data(name)）
+    cy.value.style(styleDef);
+    // 给已有节点补 displayName（兼容旧数据）
+    cy.value.nodes().forEach((n) => {
+      const nm = (n.data("name") || "").toString().trim();
+      n.data("displayName", nm || n.id());
+    });
     relayout();
   }
   highlightSelected();
