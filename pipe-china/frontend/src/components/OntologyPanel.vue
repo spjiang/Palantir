@@ -76,7 +76,7 @@
               <table class="json-table">
                 <thead>
                   <tr>
-                    <th v-for="col in getSectionColumns(section.key)" :key="col">{{ col }}</th>
+                    <th v-for="col in getSectionColumns(section.key)" :key="col">{{ getColumnLabel(section.key, col) }}</th>
                     <th class="json-col-actions">操作</th>
                   </tr>
                 </thead>
@@ -644,20 +644,20 @@ function formatJsonValue(v) {
 }
 
 const streamSections = [
-  { key: "entities", title: "实体列表" },
-  { key: "relations", title: "关系列表" },
-  { key: "rules", title: "规则列表" },
-  { key: "behaviors", title: "行为列表" },
-  { key: "state_transitions", title: "状态迁移列表" },
+  { key: "entities", title: "对象列表如下" },
+  { key: "relations", title: "关系列表如下" },
+  { key: "behaviors", title: "行为列表如下" },
+  { key: "rules", title: "规则列表如下" },
+  { key: "state_transitions", title: "状态迁移列表如下" },
 ];
 
 function getSectionColumns(sectionKey) {
   const list = streamPanel.value.edit?.[sectionKey] || [];
   const preferred = {
-    entities: ["name", "label", "props", "id"],
-    relations: ["src", "dst", "type", "props", "id"],
-    rules: ["name", "trigger", "action", "approval_required", "required_evidence"],
-    behaviors: ["name", "preconditions", "inputs", "outputs", "effects"],
+    entities: ["name", "label", "props"],
+    relations: ["type", "src", "dst", "props"],
+    behaviors: ["name", "preconditions", "affects", "state_from", "state_to", "produces", "inputs", "outputs", "effects", "desc"],
+    rules: ["name", "behavior", "trigger", "action", "approval_required", "sla_minutes", "required_evidence", "forbids", "allows", "involves"],
     state_transitions: ["object", "from", "to", "via"],
   };
   const order = preferred[sectionKey] || [];
@@ -667,6 +667,14 @@ function getSectionColumns(sectionKey) {
   }
   const rest = [...keys].filter((k) => !order.includes(k));
   return [...order.filter((k) => keys.has(k)), ...rest];
+}
+
+function getColumnLabel(sectionKey, col) {
+  const labels = {
+    entities: { name: "名称", label: "标签", props: "属性" },
+    relations: { type: "类型", src: "源", dst: "目标", props: "属性" },
+  };
+  return labels?.[sectionKey]?.[col] || col;
 }
 
 function formatCell(val) {
