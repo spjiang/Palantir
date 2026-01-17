@@ -76,7 +76,7 @@
           <input class="search" v-model="kw" placeholder="搜索名称/类型…" />
 
           <div class="list">
-            <template v-if="nodeTab !== 'relations'">
+            <template v-if="nodeTab !== 'relations' && nodeTab !== 'states'">
               <div
                 v-for="n in filteredEntities"
                 :key="n.id"
@@ -88,7 +88,7 @@
                 <div class="row-sub">{{ n.label }} · {{ n.id }}</div>
               </div>
             </template>
-            <template v-else>
+            <template v-else-if="nodeTab === 'relations'">
               <div
                 v-for="e in filteredRelations"
                 :key="e.id"
@@ -98,6 +98,12 @@
               >
                 <div class="row-title">{{ e.type }}</div>
                 <div class="row-sub">{{ e.src }} → {{ e.dst }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <div v-for="t in filteredStateTransitions" :key="t.id" class="rowitem">
+                <div class="row-title">{{ t.via || "状态迁移" }}</div>
+                <div class="row-sub">{{ t.from }} → {{ t.to }}（{{ t.object }}）</div>
               </div>
             </template>
           </div>
@@ -288,6 +294,7 @@ const streamPanel = ref({
   generatedJson: "",
   partial: null,
   seen: null,
+  parser: null,
   pendingClear: false,
 });
 
@@ -339,9 +346,192 @@ function resetStreamPanel() {
   // 清空右侧列表，准备接收新的流式数据
   entities.value = [];
   relations.value = [];
+  stateTransitions.value = [];
   // 清空图谱画布
   if (cy.value) {
     cy.value.elements().remove();
+  }
+  initStreamParser();
+}
+
+function initStreamParser() {
+  streamPanel.value.parser = {
+    // pendingKey/activeKey 用于识别正在解析哪个一级数组
+    pendingKey: "",
+    activeKey: "",
+    bracketDepth: 0,
+    // 字符串转义状态机（用于忽略字符串内部的 {}[]）
+    inString: false,
+    esc: false,
+    // 当前对象花括号深度与缓冲
+    objDepth: 0,
+    objBuf: "",
+    // 用于跨 token 识别 `"entities"` 等 key
+    keyBuf: "",
+  };
+}
+
+function hashStr(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
+  return (h >>> 0).toString(16);
+}
+
+function addStreamObjectToUI(sectionKey, obj, rawStr) {
+  if (!obj || typeof obj !== "object") return;
+
+  // entities：对象列表（直接用 name/label/props）
+  if (sectionKey === "entities") {
+    const name = (obj.name || "").toString().trim();
+    if (!name) return;
+    const label = (obj.label || "Concept").toString().trim() || "Concept";
+    const id = `tmp-ent-${hashStr(`${label}::${name}`)}`;
+    if (!entities.value.some((e) => e.id === id)) {
+      entities.value.push({ id, name, label, props: obj.props || {} });
+    }
+    return;
+  }
+
+  // relations：关系列表（type/src/dst/props）
+  if (sectionKey === "relations") {
+    const type = (obj.type || "RELATED_TO").toString().trim() || "RELATED_TO";
+    const src = (obj.src || "").toString().trim();
+    const dst = (obj.dst || "").toString().trim();
+    if (!src || !dst) return;
+    const id = `tmp-rel-${hashStr(`${type}::${src}::${dst}`)}`;
+    if (!relations.value.some((r) => r.id === id)) {
+      relations.value.push({ id, type, src, dst, props: obj.props || {} });
+    }
+    return;
+  }
+
+  // behaviors：行为（作为“节点”展示，label=Behavior）
+  if (sectionKey === "behaviors") {
+    const name = (obj.name || "").toString().trim();
+    if (!name) return;
+    const id = `tmp-beh-${hashStr(name)}`;
+    if (!entities.value.some((e) => e.id === id)) {
+      entities.value.push({ id, name, label: "Behavior", props: obj });
+    }
+    return;
+  }
+
+  // rules：规则（作为“节点”展示，label=Rule）
+  if (sectionKey === "rules") {
+    const name = (obj.name || "").toString().trim();
+    if (!name) return;
+    const id = `tmp-rule-${hashStr(name)}`;
+    if (!entities.value.some((e) => e.id === id)) {
+      entities.value.push({ id, name, label: "Rule", props: obj });
+    }
+    return;
+  }
+
+  // state_transitions：状态迁移（按你的定义：属于“状态”tab）
+  if (sectionKey === "state_transitions") {
+    const from = (obj.from || "").toString().trim();
+    const to = (obj.to || "").toString().trim();
+    const via = (obj.via || "").toString().trim();
+    const object = (obj.object || "").toString().trim();
+    if (!from || !to) return;
+    const id = `tmp-st-${hashStr(`${object}::${from}::${to}::${via}`)}`;
+    if (!stateTransitions.value.some((t) => t.id === id)) {
+      stateTransitions.value.push({ id, object, from, to, via, raw: rawStr || "" });
+    }
+  }
+}
+
+function processStreamChunk(chunkText) {
+  if (!chunkText) return;
+  const p = streamPanel.value.parser;
+  if (!p) return;
+  const KEYS = new Set(["entities", "relations", "behaviors", "rules", "state_transitions"]);
+
+  for (let idx = 0; idx < chunkText.length; idx++) {
+    const ch = chunkText[idx];
+
+    // 1) 字符串状态（忽略字符串内部的 {}[]）
+    if (p.inString) {
+      if (p.objDepth > 0) p.objBuf += ch;
+      if (p.esc) {
+        p.esc = false;
+        continue;
+      }
+      if (ch === "\\") {
+        p.esc = true;
+        continue;
+      }
+      if (ch === '"') p.inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      p.inString = true;
+      if (p.objDepth > 0) p.objBuf += ch;
+      if (p.objDepth === 0) p.keyBuf = '"';
+      continue;
+    }
+
+    // 2) keyBuf：识别 `"entities"` 这类 key（跨 token）
+    if (p.objDepth === 0 && p.keyBuf) {
+      p.keyBuf += ch;
+      if (ch === '"') {
+        const m = p.keyBuf.match(/^"([^"]+)"$/);
+        if (m && KEYS.has(m[1])) p.pendingKey = m[1];
+        p.keyBuf = "";
+      } else if (p.keyBuf.length > 64) {
+        p.keyBuf = "";
+      }
+      continue;
+    }
+
+    // 3) 进入/退出一级数组
+    if (!p.activeKey && p.pendingKey) {
+      if (ch === "[") {
+        p.activeKey = p.pendingKey;
+        p.pendingKey = "";
+        p.bracketDepth = 1;
+        p.objDepth = 0;
+        p.objBuf = "";
+        continue;
+      }
+      if (!/\s/.test(ch) && ch !== ":") p.pendingKey = "";
+    } else if (p.activeKey && p.objDepth === 0) {
+      if (ch === "[") p.bracketDepth += 1;
+      else if (ch === "]") {
+        p.bracketDepth -= 1;
+        if (p.bracketDepth <= 0) {
+          p.activeKey = "";
+          p.bracketDepth = 0;
+          p.objDepth = 0;
+          p.objBuf = "";
+        }
+      }
+    }
+
+    // 4) 在一级数组内，用 {} 花括号配对抽取对象
+    if (p.activeKey) {
+      if (ch === "{") {
+        p.objDepth += 1;
+        p.objBuf += ch;
+        continue;
+      }
+      if (p.objDepth > 0) {
+        p.objBuf += ch;
+        if (ch === "}") {
+          p.objDepth -= 1;
+          if (p.objDepth === 0) {
+            const rawStr = p.objBuf;
+            p.objBuf = "";
+            try {
+              const obj = JSON.parse(rawStr);
+              addStreamObjectToUI(p.activeKey, obj, rawStr);
+            } catch {
+              // 解析失败（例如尾逗号/未完全合法 JSON），忽略；后续 token 形成合法对象时会再次被提取
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -817,6 +1007,7 @@ async function applyStreamEditsToDraft() {
 
 const entities = ref([]);
 const relations = ref([]);
+const stateTransitions = ref([]); // 对应提示词里的 state_transitions（状态）
 const nodeTab = ref("objects"); // objects | relations | behaviors | rules | states
 const kw = ref("");
 const query = ref({ root_id: "", depth: 3 });
@@ -879,6 +1070,17 @@ const filteredRelations = computed(() => {
   const k = kw.value.trim();
   if (!k) return relations.value;
   return relations.value.filter((e) => (e.type || "").includes(k) || (e.id || "").includes(k) || (e.src || "").includes(k) || (e.dst || "").includes(k));
+});
+const filteredStateTransitions = computed(() => {
+  const k = kw.value.trim();
+  if (!k) return stateTransitions.value;
+  return stateTransitions.value.filter(
+    (t) =>
+      (t.object || "").includes(k) ||
+      (t.from || "").includes(k) ||
+      (t.to || "").includes(k) ||
+      (t.via || "").includes(k)
+  );
 });
 
 const onFile = (e) => (file.value = e.target.files?.[0] || null);
@@ -1159,7 +1361,8 @@ async function extract() {
           console.log("[extract] Received token:", tokenText.substring(0, 100));
           streamPanel.value.text += tokenText;
           console.log("[extract] Total text length:", streamPanel.value.text.length);
-          processStreamIncremental();
+          // 按提示词：动态获取字符串，依据 JSON 规则（{}成对）实时抽取每个 list 的对象并更新右侧列表
+          processStreamChunk(tokenText);
           tryParseStreamJson();
         } else if (ev === "done") {
           streamPanel.value.stage = "完成";
@@ -1172,36 +1375,9 @@ async function extract() {
             streamPanel.value.parseError = "";
             updateGeneratedJson();
           }
-          // 合并后端返回的完整数据到 entities 和 relations 列表（避免覆盖实时添加的数据）
-          if (payload.nodes && Array.isArray(payload.nodes)) {
-            const existingIds = new Set(entities.value.map((e) => e.id));
-            for (const node of payload.nodes) {
-              if (!existingIds.has(node.id)) {
-                entities.value.push({
-                  id: node.id,
-                  name: node.name || "",
-                  label: node.label || "Concept",
-                  props: node.props || {},
-                });
-                console.log(`[done] 合并节点到 entities.value:`, node);
-              }
-            }
-          }
-          if (payload.edges && Array.isArray(payload.edges)) {
-            const existingIds = new Set(relations.value.map((r) => r.id));
-            for (const edge of payload.edges) {
-              if (!existingIds.has(edge.id)) {
-                relations.value.push({
-                  id: edge.id,
-                  type: edge.type || "RELATED_TO",
-                  src: edge.src || "",
-                  dst: edge.dst || "",
-                  props: edge.props || {},
-                });
-                console.log(`[done] 合并关系到 relations.value:`, edge);
-              }
-            }
-          }
+          // done 后切换为“真实 draft 图”（带稳定 id），便于画布/编辑/入库
+          if (payload.nodes && Array.isArray(payload.nodes)) entities.value = payload.nodes;
+          if (payload.edges && Array.isArray(payload.edges)) relations.value = payload.edges;
           toastSuccess("抽取完成：请在下方编辑后点击「确认入库（草稿图谱）」。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
@@ -1293,11 +1469,14 @@ const createBtnText = computed(() => {
 
 const stats = computed(() => {
   const totalNodes = entities.value.length;
-  const totalEdges = relations.value.length;
+  const totalEdges = relations.value.length + stateTransitions.value.length;
   const behaviors = entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
   const rules = entities.value.filter((n) => normLabel(n.label) === "Rule").length;
-  const states = entities.value.filter((n) => normLabel(n.label) === "State").length;
-  const objects = Math.max(0, totalNodes - behaviors - rules - states);
+  // 按提示词：state_transitions 就是“状态”数据
+  const states = stateTransitions.value.length;
+  // 仍然从节点中扣除 Behavior/Rule/State（如有）以计算“对象”数
+  const stateNodes = entities.value.filter((n) => normLabel(n.label) === "State").length;
+  const objects = Math.max(0, totalNodes - behaviors - rules - stateNodes);
   return { totalNodes, totalEdges, behaviors, rules, states, objects };
 });
 
