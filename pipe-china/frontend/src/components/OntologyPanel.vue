@@ -66,58 +66,58 @@
       <div class="stream-json" v-if="streamPanel.edit">
         <div v-if="streamPanel.parseError" class="json-hint">{{ streamPanel.parseError }}</div>
 
-        <div
-          class="json-section"
-          v-for="section in streamSections"
-          :key="section.key"
-          v-if="(streamPanel.edit?.[section.key]?.length || 0) > 0"
-        >
-          <div class="json-section-title">{{ section.title }}</div>
-          <div class="json-table-wrap">
-            <table class="json-table">
-              <thead>
-                <tr>
-                  <th v-for="col in getSectionColumns(section.key)" :key="col">{{ col }}</th>
-                  <th class="json-col-actions">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="it in streamPanel.edit[section.key]" :key="it.__id">
-                  <td v-for="col in getSectionColumns(section.key)" :key="col">
-                    <template v-if="it.__editing">
-                      <textarea
-                        v-if="isObjectValue(it.__editValues?.[col])"
-                        class="json-cell-input mono"
-                        rows="3"
-                        :value="formatJsonValue(it.__editValues?.[col])"
-                        @input="updateRowFieldJson(it, col, $event.target.value)"
-                      ></textarea>
-                      <input
-                        v-else
-                        class="json-cell-input"
-                        :value="it.__editValues?.[col]"
-                        @input="updateRowField(it, col, $event.target.value)"
-                      />
-                    </template>
-                    <template v-else>
-                      <span class="json-cell-text">{{ formatCell(it.__obj?.[col]) }}</span>
-                    </template>
-                  </td>
-                  <td class="json-actions-col">
-                    <template v-if="it.__editing">
-                      <button class="btn mini" @click="saveEditRow(it)">保存</button>
-                      <button class="btn secondary mini" @click="cancelEditRow(it)">取消</button>
-                    </template>
-                    <template v-else>
-                      <button class="btn secondary mini" @click="startEditRow(it)">编辑</button>
-                    </template>
-                    <button class="btn danger mini" @click="deleteStreamItem(section.key, it)">删除</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <template v-for="section in streamSections" :key="section.key">
+          <div
+            class="json-section"
+            v-if="(streamPanel.edit?.[section.key]?.length || 0) > 0"
+          >
+            <div class="json-section-title">{{ section.title }}</div>
+            <div class="json-table-wrap">
+              <table class="json-table">
+                <thead>
+                  <tr>
+                    <th v-for="col in getSectionColumns(section.key)" :key="col">{{ col }}</th>
+                    <th class="json-col-actions">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="it in streamPanel.edit[section.key]" :key="it.__id">
+                    <td v-for="col in getSectionColumns(section.key)" :key="col">
+                      <template v-if="it.__editing">
+                        <textarea
+                          v-if="isObjectValue(it.__editValues?.[col])"
+                          class="json-cell-input mono"
+                          rows="3"
+                          :value="formatJsonValue(it.__editValues?.[col])"
+                          @input="updateRowFieldJson(it, col, $event.target.value)"
+                        ></textarea>
+                        <input
+                          v-else
+                          class="json-cell-input"
+                          :value="it.__editValues?.[col]"
+                          @input="updateRowField(it, col, $event.target.value)"
+                        />
+                      </template>
+                      <template v-else>
+                        <span class="json-cell-text">{{ formatCell(it.__obj?.[col]) }}</span>
+                      </template>
+                    </td>
+                    <td class="json-actions-col">
+                      <template v-if="it.__editing">
+                        <button class="btn mini" @click="saveEditRow(it)">保存</button>
+                        <button class="btn secondary mini" @click="cancelEditRow(it)">取消</button>
+                      </template>
+                      <template v-else>
+                        <button class="btn secondary mini" @click="startEditRow(it)">编辑</button>
+                      </template>
+                      <button class="btn danger mini" @click="deleteStreamItem(section.key, it)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
     </div>
 
