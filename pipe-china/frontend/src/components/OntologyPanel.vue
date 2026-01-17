@@ -10,9 +10,7 @@
         <template v-if="scope === 'draft'">
           <input class="file" type="file" @change="onFile" accept=".md,.txt" />
           <button class="btn" :disabled="!file || loading" @click="extract">上传并抽取</button>
-          <button class="btn secondary" :disabled="loading" @click="refresh">刷新草稿</button>
-          <button class="btn" :disabled="!draftId || loading" @click="commitDraft">确认入库</button>
-          <button class="btn secondary" :disabled="!draftId || loading" @click="cancelDraft">取消草稿</button>
+          <button class="btn" :disabled="!draftId || loading" @click="commitDraft">确认入正式图谱</button>
         </template>
         <template v-else>
           <button class="btn secondary" :disabled="loading" @click="refresh">刷新正式库</button>
@@ -43,6 +41,10 @@
           <div class="toolbtns">
             <button class="btn secondary" :disabled="!cy" @click="relayout">重新布局</button>
             <button class="btn secondary" :disabled="!cy" @click="fit">适配视图</button>
+            <template v-if="scope === 'draft'">
+              <button class="btn secondary" :disabled="loading || !draftId" @click="refresh">刷新图谱</button>
+              <button class="btn secondary" :disabled="loading || !draftId" @click="cancelDraft">清空图谱</button>
+            </template>
             <div class="legend" title="颜色图例">
               <span class="lg-item"><i class="dot behavior"></i>行为</span>
               <span class="lg-item"><i class="dot rule"></i>规则</span>
@@ -317,15 +319,17 @@ const streamPanel = ref({
   pendingClear: false,
 });
 
-const jsonPreview = ref({ open: true, maxChars: 2400 });
+// JSON 实时预览：默认显示完整内容（不截断）
+// 如后续觉得太大影响性能，可把 maxChars 改为一个正数启用截断
+const jsonPreview = ref({ open: true, maxChars: 0 });
 const jsonPreviewLen = computed(() => (streamPanel.value.text || "").length);
 const jsonPreviewText = computed(() => {
   const raw = streamPanel.value.text || "";
   const cleaned = cleanStreamJson(raw);
-  const max = jsonPreview.value.maxChars || 2400;
   if (!cleaned) return "";
-  if (cleaned.length <= max) return cleaned;
-  return `…(截断，仅显示末尾 ${max} 字符)\n` + cleaned.slice(-max);
+  const max = Number(jsonPreview.value.maxChars || 0);
+  if (max > 0 && cleaned.length > max) return cleaned.slice(0, max);
+  return cleaned;
 });
 
 async function copyJsonPreview() {
@@ -468,7 +472,10 @@ function addNodeToCyIfMissing(node) {
   ensureCyReady();
   if (!cy.value) return;
   if (cy.value.getElementById(node.id)?.length) return;
-  cy.value.add({ data: { id: node.id, name: node.name || "", label: node.label || "Concept", props: node.props || {} } });
+  const displayName = (node.name || "").toString().trim() || node.id;
+  cy.value.add({
+    data: { id: node.id, name: node.name || "", displayName, label: node.label || "Concept", props: node.props || {} },
+  });
   scheduleStreamRelayout();
 }
 
@@ -1279,7 +1286,15 @@ function highlightSelected() {
 
 function buildCy(nodes, edges) {
   const elements = [
-    ...nodes.map((n) => ({ data: { id: n.id, name: n.name, label: n.label, props: n.props || {} } })),
+    ...nodes.map((n) => ({
+      data: {
+        id: n.id,
+        name: n.name,
+        displayName: ((n.name || "").toString().trim() || n.id),
+        label: n.label,
+        props: n.props || {},
+      },
+    })),
     ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type, props: e.props || {} } })),
   ];
 
@@ -1292,7 +1307,8 @@ function buildCy(nodes, edges) {
           selector: "node",
           style: {
             "background-color": "#6366f1",
-            label: "data(name)",
+            // 动态流式生成时，部分节点 name 可能为空；用 displayName 兜底为 id，保证始终有文字
+            label: "data(displayName)",
             color: "#e2e8f0",
             "text-outline-color": "#0b1220",
             "text-outline-width": 3,
@@ -1368,12 +1384,22 @@ function buildCy(nodes, edges) {
           linkDraft.value.dst = "";
         }
       } else {
-        selectNodeById(id);
+        // 如果已选中同一节点但用户把弹窗关了，再点一次也要能重新打开
+        if (selected.value?.kind === "node" && selected.value.id === id) {
+          openEditorModal();
+        } else {
+          selectNodeById(id);
+        }
       }
     });
     cy.value.on("tap", "edge", (evt) => {
       if (linkMode.value) return;
-      selectEdgeById(evt.target.id());
+      const id = evt.target.id();
+      if (selected.value?.kind === "edge" && selected.value.id === id) {
+        openEditorModal();
+      } else {
+        selectEdgeById(id);
+      }
     });
     cy.value.on("tap", (evt) => {
       if (evt.target === cy.value && !linkMode.value) clearSelection();
@@ -1415,6 +1441,8 @@ function selectNodeById(id) {
   selected.value = { kind: "node", id };
   editNode.value = { id, name: n.name || "", label: n.label || "Concept", propsText: JSON.stringify(n.props || {}, null, 2) };
   highlightSelected();
+  // 点击/选择就打开编辑弹窗（避免同一节点再次点击时 watch 不触发）
+  openEditorModal();
 }
 function selectEdgeById(id) {
   let e = relations.value.find((x) => x.id === id);
@@ -1430,6 +1458,7 @@ function selectEdgeById(id) {
   selected.value = { kind: "edge", id };
   editEdge.value = { id, type: e.type || "RELATED_TO", src: e.src, dst: e.dst, propsText: JSON.stringify(e.props || {}, null, 2) };
   highlightSelected();
+  openEditorModal();
 }
 
 function toggleLinkMode() {
@@ -1548,6 +1577,11 @@ async function extract() {
           streamPanel.value.done = true;
           streamPanel.value.hasEverOpened = true;
           streamPanel.value.draftId = payload.draft_id || "";
+          // 关键：把 draftId 回传给父组件（Draft.vue 存 sessionStorage + 传回 props.draftId）
+          // 否则“刷新草稿/图查询/确认入正式图谱”会因为 props.draftId 为空而把画布清空
+          if (props.scope === "draft" && streamPanel.value.draftId && streamPanel.value.draftId !== props.draftId) {
+            emit("draft-created", streamPanel.value.draftId);
+          }
           if (!streamPanel.value.userEdited) {
             streamPanel.value.json = payload;
             streamPanel.value.edit = normalizeEditablePayload(payload);
@@ -1560,7 +1594,7 @@ async function extract() {
           if (payload.nodes && Array.isArray(payload.nodes) && payload.edges && Array.isArray(payload.edges)) {
             buildCy(payload.nodes, payload.edges);
           }
-          toastSuccess("抽取完成：请在下方编辑后点击「确认入库（草稿图谱）」。");
+          toastSuccess("抽取完成：请在下方编辑后点击「确认入正式图谱（草稿图谱）」。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
         }
@@ -1867,8 +1901,8 @@ function confirmDanger(action) {
   const map = {
     deleteNode: { title: "删除对象", message: "确认删除该对象？相关关系也会被删除。", action: deleteNode },
     deleteEdge: { title: "删除关系", message: "确认删除该关系？", action: deleteEdge },
-    cancelDraft: { title: "取消草稿", message: "确认取消草稿？将删除临时图谱数据，且不可恢复。", action: cancelDraftDo },
-    commitDraft: { title: "确认入库", message: "确认将草稿入库到正式图数据库吗？入库后草稿将被清理。", action: commitDraftDo },
+    cancelDraft: { title: "清空图谱", message: "确认清空当前草稿图谱？将删除临时图谱数据，且不可恢复。", action: cancelDraftDo },
+    commitDraft: { title: "确认入正式图谱", message: "确认将草稿写入正式图谱吗？写入后草稿将被清理。", action: commitDraftDo },
     purgeAll: { title: "清空图数据库", message: "危险：将清空【正式图谱 + 草稿图谱】的所有节点与关系，且不可恢复。", action: purgeAllDo },
   };
   const item = map[action];
@@ -1888,8 +1922,8 @@ async function commitDraftDo() {
   const issues = validateBehaviorsMounted();
   if (issues.length) {
     openInfoModal(
-      "入库校验未通过",
-      "以下行为未挂载任何对象（请为每个行为创建“作用于/适用对象”关系后再入库）：\n- " + issues.join("\n- ")
+      "写入正式图谱校验未通过",
+      "以下行为未挂载任何对象（请为每个行为创建“作用于/适用对象”关系后再写入正式图谱）：\n- " + issues.join("\n- ")
     );
     return;
   }
@@ -1898,11 +1932,11 @@ async function commitDraftDo() {
     const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/commit`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    toastSuccess(`入库成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
+    toastSuccess(`写入正式图谱成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
     emit("committed");
     emit("draft-cleared");
   } catch (e) {
-    toastError(`入库失败: ${e}`);
+    toastError(`写入正式图谱失败: ${e}`);
   } finally {
     loading.value = false;
   }
@@ -1981,14 +2015,8 @@ async function saveEdgeAndClose() {
   closeEditorModal();
 }
 
-// 选中节点/关系时自动弹出属性编辑（更像产品）
-watch(
-  () => selected.value?.id,
-  (id) => {
-    if (!id) return;
-    openEditorModal();
-  }
-);
+// 选中节点/关系时由 selectNodeById/selectEdgeById 主动打开弹窗；
+// 这样“再次点击同一个节点”也能重新打开，不依赖 selected.id 变化。
 </script>
 
 <style scoped>
