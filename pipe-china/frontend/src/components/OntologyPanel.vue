@@ -591,13 +591,18 @@ function extractObjectsFromArray(raw, key, state) {
 
 function appendStreamObjects(sectionKey, items) {
   if (!items?.length) return;
+  console.log(`[appendStreamObjects] ${sectionKey}: adding ${items.length} items`);
   const list = streamPanel.value.edit?.[sectionKey] || [];
   const seen = streamPanel.value.seen?.[sectionKey];
+  let added = 0;
   for (const it of items) {
     const signature = it.raw || JSON.stringify(it.obj || {});
-    if (seen && seen.has(signature)) continue;
+    if (seen && seen.has(signature)) {
+      console.log(`[appendStreamObjects] ${sectionKey}: skipping duplicate`, signature.substring(0, 50));
+      continue;
+    }
     seen?.add(signature);
-    list.push({
+    const newItem = {
       __id: it.obj?.id || it.obj?.name || `${sectionKey}-${list.length + 1}`,
       __obj: JSON.parse(JSON.stringify(it.obj || {})),
       __text: JSON.stringify(it.obj || {}, null, 2),
@@ -606,19 +611,28 @@ function appendStreamObjects(sectionKey, items) {
       __editing: false,
       __editValues: JSON.parse(JSON.stringify(it.obj || {})),
       __error: "",
-    });
+    };
+    list.push(newItem);
+    added++;
+    console.log(`[appendStreamObjects] ${sectionKey}: added item`, newItem.__id, newItem.__obj);
   }
   streamPanel.value.edit[sectionKey] = list;
+  console.log(`[appendStreamObjects] ${sectionKey}: total count now = ${list.length}, added = ${added}`);
   updateGeneratedJson();
 }
 
 function processStreamIncremental() {
   const raw = cleanStreamJson(streamPanel.value.text || "");
   if (!raw || !streamPanel.value.partial) return;
+  console.log("[processStreamIncremental] raw text length:", raw.length, "first 200 chars:", raw.substring(0, 200));
   const keys = ["entities", "relations", "rules", "behaviors", "state_transitions"];
   for (const key of keys) {
     const state = streamPanel.value.partial[key];
     const items = extractObjectsFromArray(raw, key, state);
+    console.log(`[processStreamIncremental] key=${key}, found ${items.length} new objects`);
+    if (items.length > 0) {
+      console.log(`[processStreamIncremental] ${key} first item:`, items[0]);
+    }
     appendStreamObjects(key, items);
   }
 }
@@ -1211,10 +1225,14 @@ async function extract() {
           streamPanel.value.stage = payload.message || payload.stage || "调用中";
         } else if (ev === "token") {
           if (streamPanel.value.pendingClear) {
+            console.log("[extract] First token received, clearing old data");
             clearStreamEdits();
             streamPanel.value.pendingClear = false;
           }
-          streamPanel.value.text += payload.text || "";
+          const tokenText = payload.text || "";
+          console.log("[extract] Received token:", tokenText.substring(0, 100));
+          streamPanel.value.text += tokenText;
+          console.log("[extract] Total text length:", streamPanel.value.text.length);
           processStreamIncremental();
           tryParseStreamJson();
         } else if (ev === "done") {
