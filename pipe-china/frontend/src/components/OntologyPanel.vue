@@ -23,12 +23,12 @@
 
     <div v-if="toastOk" class="toast ok">{{ toastOk }}</div>
     <div v-if="toastErr" class="toast err">{{ toastErr }}</div>
-    <div class="stats" v-if="stats.totalNodes || stats.totalEdges">
+    <div class="stats" v-if="stats.totalNodes || stats.relations">
       <span class="st">行为 {{ stats.behaviors }}</span>
       <span class="st">规则 {{ stats.rules }}</span>
       <span class="st">状态 {{ stats.states }}</span>
       <span class="st">对象 {{ stats.objects }}</span>
-      <span class="st">关系 {{ stats.totalEdges }}</span>
+      <span class="st">关系 {{ stats.relations }}</span>
     </div>
     <!-- 抽取流式面板：始终显示（不隐藏） -->
     <div class="body">
@@ -118,6 +118,25 @@
           <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
             {{ linkMode ? '退出连线' : '连线创建' }}
           </button>
+          </div>
+        </div>
+
+        <!-- 放在“本体数据区域下”（面板外部）：JSON 实时预览 -->
+        <div class="json-preview-outer">
+          <div class="json-preview" v-if="jsonPreview.open">
+            <div class="json-preview-head">
+              <div class="json-preview-title">JSON 实时预览</div>
+              <div class="json-preview-sub">{{ streamPanel.stage || "接收中" }} · {{ jsonPreviewLen }} chars</div>
+              <button class="btn secondary mini" :disabled="!jsonPreviewText" @click="copyJsonPreview">复制</button>
+              <button class="btn secondary mini" @click="jsonPreview.open = false">收起</button>
+            </div>
+            <pre class="json-preview-body mono">{{ jsonPreviewText }}</pre>
+          </div>
+          <div class="json-preview-collapsed" v-else>
+            <div class="json-preview-title">JSON 实时预览</div>
+            <div class="json-preview-sub">{{ streamPanel.stage || "接收中" }} · {{ jsonPreviewLen }} chars</div>
+            <button class="btn secondary mini" :disabled="!jsonPreviewText" @click="copyJsonPreview">复制</button>
+            <button class="btn secondary mini" @click="jsonPreview.open = true">展开</button>
           </div>
         </div>
       </div>
@@ -298,6 +317,44 @@ const streamPanel = ref({
   pendingClear: false,
 });
 
+const jsonPreview = ref({ open: true, maxChars: 2400 });
+const jsonPreviewLen = computed(() => (streamPanel.value.text || "").length);
+const jsonPreviewText = computed(() => {
+  const raw = streamPanel.value.text || "";
+  const cleaned = cleanStreamJson(raw);
+  const max = jsonPreview.value.maxChars || 2400;
+  if (!cleaned) return "";
+  if (cleaned.length <= max) return cleaned;
+  return `…(截断，仅显示末尾 ${max} 字符)\n` + cleaned.slice(-max);
+});
+
+async function copyJsonPreview() {
+  const text = jsonPreviewText.value || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toastSuccess("已复制 JSON 到剪贴板");
+  } catch (e) {
+    // 兼容性 fallback
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (ok) toastSuccess("已复制 JSON 到剪贴板");
+      else toastError("复制失败：浏览器不允许访问剪贴板");
+    } catch {
+      toastError("复制失败：浏览器不允许访问剪贴板");
+    }
+  }
+}
+
 function collapseStream() {
   streamPanel.value.open = false;
   streamPanel.value.hasEverOpened = true;
@@ -366,8 +423,11 @@ function initStreamParser() {
     // 当前对象花括号深度与缓冲
     objDepth: 0,
     objBuf: "",
-    // 用于跨 token 识别 `"entities"` 等 key
-    keyBuf: "",
+    // 顶层 key 名识别（跨 token）：遇到 "xxx" 时收集 xxx
+    collectingKey: false,
+    keyName: "",
+    // pendingKey 后，等待 '[' 的容错计数（避免误匹配）
+    pendingTicks: 0,
   };
 }
 
@@ -450,7 +510,37 @@ function processStreamChunk(chunkText) {
   for (let idx = 0; idx < chunkText.length; idx++) {
     const ch = chunkText[idx];
 
-    // 1) 字符串状态（忽略字符串内部的 {}[]）
+    // A) 正在收集顶层 key 名（"entities" 这种）
+    if (p.collectingKey) {
+      if (p.esc) {
+        p.esc = false;
+        p.keyName += ch;
+        continue;
+      }
+      if (ch === "\\") {
+        p.esc = true;
+        continue;
+      }
+      if (ch === '"') {
+        // key 结束
+        p.collectingKey = false;
+        if (KEYS.has(p.keyName)) {
+          p.pendingKey = p.keyName;
+          p.pendingTicks = 0;
+        }
+        p.keyName = "";
+        continue;
+      }
+      p.keyName += ch;
+      // 防御：过长直接放弃
+      if (p.keyName.length > 64) {
+        p.collectingKey = false;
+        p.keyName = "";
+      }
+      continue;
+    }
+
+    // B) 字符串状态（仅用于对象内部：忽略字符串里的 {}[]）
     if (p.inString) {
       if (p.objDepth > 0) p.objBuf += ch;
       if (p.esc) {
@@ -464,37 +554,43 @@ function processStreamChunk(chunkText) {
       if (ch === '"') p.inString = false;
       continue;
     }
-    if (ch === '"') {
-      p.inString = true;
-      if (p.objDepth > 0) p.objBuf += ch;
-      if (p.objDepth === 0) p.keyBuf = '"';
-      continue;
-    }
 
-    // 2) keyBuf：识别 `"entities"` 这类 key（跨 token）
-    if (p.objDepth === 0 && p.keyBuf) {
-      p.keyBuf += ch;
-      if (ch === '"') {
-        const m = p.keyBuf.match(/^"([^"]+)"$/);
-        if (m && KEYS.has(m[1])) p.pendingKey = m[1];
-        p.keyBuf = "";
-      } else if (p.keyBuf.length > 64) {
-        p.keyBuf = "";
+    // C) 遇到引号：如果在对象内，进入字符串；如果在顶层且未进入数组，开始收集 key 名
+    if (ch === '"') {
+      if (p.objDepth > 0) {
+        p.inString = true;
+        p.objBuf += ch;
+      } else if (!p.activeKey) {
+        // 只在未进入一级数组时尝试识别 key
+        p.collectingKey = true;
+        p.keyName = "";
+      } else {
+        // 在数组但不在对象内（理论上不会出现字符串值；兜底处理）
+        p.inString = true;
       }
       continue;
     }
 
     // 3) 进入/退出一级数组
     if (!p.activeKey && p.pendingKey) {
+      p.pendingTicks += 1;
       if (ch === "[") {
         p.activeKey = p.pendingKey;
         p.pendingKey = "";
         p.bracketDepth = 1;
         p.objDepth = 0;
         p.objBuf = "";
+        p.pendingTicks = 0;
         continue;
       }
-      if (!/\s/.test(ch) && ch !== ":") p.pendingKey = "";
+      // 允许 : 和空白，其他字符太多则放弃 pendingKey
+      if (!/\s/.test(ch) && ch !== ":") {
+        p.pendingKey = "";
+        p.pendingTicks = 0;
+      } else if (p.pendingTicks > 220) {
+        p.pendingKey = "";
+        p.pendingTicks = 0;
+      }
     } else if (p.activeKey && p.objDepth === 0) {
       if (ch === "[") p.bracketDepth += 1;
       else if (ch === "]") {
@@ -517,6 +613,11 @@ function processStreamChunk(chunkText) {
       }
       if (p.objDepth > 0) {
         p.objBuf += ch;
+        if (ch === '"') {
+          // 对象内部进入字符串
+          p.inString = true;
+          continue;
+        }
         if (ch === "}") {
           p.objDepth -= 1;
           if (p.objDepth === 0) {
@@ -525,6 +626,8 @@ function processStreamChunk(chunkText) {
             try {
               const obj = JSON.parse(rawStr);
               addStreamObjectToUI(p.activeKey, obj, rawStr);
+              // 一条对象完成就应当立即展示（便于验证）
+              // console.log("[stream] added", p.activeKey, obj?.name || obj?.type || obj?.from);
             } catch {
               // 解析失败（例如尾逗号/未完全合法 JSON），忽略；后续 token 形成合法对象时会再次被提取
             }
@@ -1469,7 +1572,8 @@ const createBtnText = computed(() => {
 
 const stats = computed(() => {
   const totalNodes = entities.value.length;
-  const totalEdges = relations.value.length + stateTransitions.value.length;
+  // 关系：只统计 relations（不要把 state_transitions 混入关系）
+  const relationsCount = relations.value.length;
   const behaviors = entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
   const rules = entities.value.filter((n) => normLabel(n.label) === "Rule").length;
   // 按提示词：state_transitions 就是“状态”数据
@@ -1477,7 +1581,7 @@ const stats = computed(() => {
   // 仍然从节点中扣除 Behavior/Rule/State（如有）以计算“对象”数
   const stateNodes = entities.value.filter((n) => normLabel(n.label) === "State").length;
   const objects = Math.max(0, totalNodes - behaviors - rules - stateNodes);
-  return { totalNodes, totalEdges, behaviors, rules, states, objects };
+  return { totalNodes, relations: relationsCount, behaviors, rules, states, objects };
 });
 
 async function createLink() {
@@ -2127,6 +2231,12 @@ watch(
   flex: 1;
   height: 100%;
 }
+.json-preview-outer {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.18);
+  overflow: hidden;
+}
 .panel {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -2173,6 +2283,45 @@ watch(
   overflow: auto;
   flex: 1;
   min-height: 0;
+}
+
+.json-preview,
+.json-preview-collapsed {
+  margin: 0 12px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(2, 6, 23, 0.35);
+  overflow: hidden;
+}
+.json-preview-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+.json-preview-title {
+  font-weight: 900;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.92);
+}
+.json-preview-sub {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.json-preview-body {
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.88);
+  background: rgba(2, 6, 23, 0.22);
 }
 .rowitem {
   padding: 10px 10px;
