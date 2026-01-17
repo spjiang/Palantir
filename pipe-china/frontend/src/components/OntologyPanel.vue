@@ -31,96 +31,6 @@
       <span class="st">关系 {{ stats.totalEdges }}</span>
     </div>
     <!-- 抽取流式面板：始终显示（不隐藏） -->
-    <div class="stream">
-      <div class="stream-head">
-        <div class="stream-title">实时抽取（DeepSeek 流式）</div>
-        <div class="stream-stage">{{ streamPanel.stage }}</div>
-        <div class="stream-actions">
-          <button
-            v-if="streamPanel.edit"
-            class="btn secondary mini"
-            :disabled="loading"
-            @click="streamPanel.showRaw = !streamPanel.showRaw"
-          >
-            {{ streamPanel.showRaw ? "隐藏原始 JSON" : "显示原始 JSON" }}
-          </button>
-          <button
-            v-if="streamPanel.edit"
-            class="btn secondary mini"
-            :disabled="loading"
-            @click="streamPanel.showGenerated = !streamPanel.showGenerated"
-          >
-            {{ streamPanel.showGenerated ? "隐藏完整 JSON" : "显示完整 JSON" }}
-          </button>
-          <button v-if="streamPanel.edit" class="btn mini" :disabled="loading" @click="applyStreamEditsToDraft">
-            确认入库（草稿图谱）
-          </button>
-        </div>
-      </div>
-      <div v-if="streamPanel.showRaw" class="stream-body mono">
-        {{ streamPanel.text || "（等待模型返回…）" }}<span v-if="loading" class="cursor">▍</span>
-      </div>
-      <div v-if="streamPanel.showGenerated" class="stream-body mono">
-        {{ streamPanel.generatedJson || "（等待生成完整 JSON…）" }}
-      </div>
-      <div class="stream-json" v-if="streamPanel.edit">
-        <div v-if="streamPanel.parseError" class="json-hint">{{ streamPanel.parseError }}</div>
-
-        <template v-for="section in streamSections" :key="section.key">
-          <div
-            class="json-section"
-            v-if="(streamPanel.edit?.[section.key]?.length || 0) > 0"
-          >
-            <div class="json-section-title">{{ section.title }}</div>
-            <div class="json-table-wrap">
-              <table class="json-table">
-                <thead>
-                  <tr>
-                    <th v-for="col in getSectionColumns(section.key)" :key="col">{{ getColumnLabel(section.key, col) }}</th>
-                    <th class="json-col-actions">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="it in streamPanel.edit[section.key]" :key="it.__id">
-                    <td v-for="col in getSectionColumns(section.key)" :key="col">
-                      <template v-if="it.__editing">
-                        <textarea
-                          v-if="isObjectValue(it.__editValues?.[col])"
-                          class="json-cell-input mono"
-                          rows="3"
-                          :value="formatJsonValue(it.__editValues?.[col])"
-                          @input="updateRowFieldJson(it, col, $event.target.value)"
-                        ></textarea>
-                        <input
-                          v-else
-                          class="json-cell-input"
-                          :value="it.__editValues?.[col]"
-                          @input="updateRowField(it, col, $event.target.value)"
-                        />
-                      </template>
-                      <template v-else>
-                        <span class="json-cell-text">{{ formatCell(it.__obj?.[col]) }}</span>
-                      </template>
-                    </td>
-                    <td class="json-actions-col">
-                      <template v-if="it.__editing">
-                        <button class="btn mini" @click="saveEditRow(it)">保存</button>
-                        <button class="btn secondary mini" @click="cancelEditRow(it)">取消</button>
-                      </template>
-                      <template v-else>
-                        <button class="btn secondary mini" @click="startEditRow(it)">编辑</button>
-                      </template>
-                      <button class="btn danger mini" @click="deleteStreamItem(section.key, it)">删除</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </template>
-      </div>
-    </div>
-
     <div class="body">
       <!-- graph (main) -->
       <div class="panel center">
@@ -157,11 +67,11 @@
         <div class="panel left">
           <div class="panel-title">本体数据</div>
           <div class="tabs">
+            <button class="tab" :class="{ active: nodeTab === 'objects' }" @click="nodeTab = 'objects'">对象</button>
+            <button class="tab" :class="{ active: nodeTab === 'relations' }" @click="nodeTab = 'relations'">关系</button>
             <button class="tab" :class="{ active: nodeTab === 'behaviors' }" @click="nodeTab = 'behaviors'">行为</button>
             <button class="tab" :class="{ active: nodeTab === 'rules' }" @click="nodeTab = 'rules'">规则</button>
             <button class="tab" :class="{ active: nodeTab === 'states' }" @click="nodeTab = 'states'">状态</button>
-            <button class="tab" :class="{ active: nodeTab === 'objects' }" @click="nodeTab = 'objects'">对象</button>
-            <button class="tab" :class="{ active: nodeTab === 'relations' }" @click="nodeTab = 'relations'">关系</button>
           </div>
           <input class="search" v-model="kw" placeholder="搜索名称/类型…" />
 
@@ -202,55 +112,6 @@
           <button class="btn secondary" :disabled="loading || (scope==='draft' && !draftId)" @click="toggleLinkMode">
             {{ linkMode ? '退出连线' : '连线创建' }}
           </button>
-          </div>
-        </div>
-
-        <div class="panel right">
-          <div class="panel-title">属性编辑</div>
-
-          <div v-if="!selected" class="empty">点击左侧列表或图谱中的节点/关系进行编辑。</div>
-
-        <template v-else>
-          <div class="kv">
-            <div class="k">ID</div>
-            <div class="v mono">{{ selected.id }}</div>
-          </div>
-          <div class="kv" v-if="selected.kind === 'node'">
-            <div class="k">类型</div>
-            <div class="v">{{ editNode.label }}</div>
-          </div>
-          <div class="kv" v-if="selected.kind === 'node'">
-            <div class="k">名称</div>
-            <div class="v">{{ editNode.name }}</div>
-          </div>
-          <div class="kv" v-if="selected.kind === 'edge'">
-            <div class="k">关系</div>
-            <div class="v">{{ editEdge.type }}</div>
-          </div>
-          <div class="kv" v-if="selected.kind === 'edge'">
-            <div class="k">连接</div>
-            <div class="v mono">{{ editEdge.src }} → {{ editEdge.dst }}</div>
-          </div>
-
-          <div class="btnrow">
-            <button class="btn" :disabled="loading" @click="openEditorModal">打开属性编辑</button>
-            <button
-              class="btn danger"
-              :disabled="loading"
-              @click="confirmDanger(selected.kind === 'node' ? 'deleteNode' : 'deleteEdge')"
-            >
-              删除
-            </button>
-          </div>
-        </template>
-
-          <div v-if="linkMode && linkDraft.src && linkDraft.dst" class="card-mini">
-            <div class="panel-title">创建关系</div>
-            <label>关系类型</label>
-            <input v-model="linkDraft.type" />
-            <label>Props（JSON）</label>
-            <textarea v-model="linkDraft.propsText" rows="6" class="mono"></textarea>
-            <button class="btn" :disabled="loading" @click="createLink">创建该关系</button>
           </div>
         </div>
       </div>
@@ -440,7 +301,7 @@ function expandStream() {
 }
 
 function resetStreamPanel() {
-  // 仅当“二次上传”开始时清理；在首个 token 到来前保留旧数据展示
+  // 仅当"二次上传"开始时清理；在首个 token 到来前保留旧数据展示
   streamPanel.value.open = true;
   streamPanel.value.stage = "调用中";
   streamPanel.value.text = "";
@@ -475,6 +336,13 @@ function resetStreamPanel() {
   };
   streamPanel.value.generatedJson = "";
   streamPanel.value.pendingClear = true;
+  // 清空右侧列表，准备接收新的流式数据
+  entities.value = [];
+  relations.value = [];
+  // 清空图谱画布
+  if (cy.value) {
+    cy.value.elements().remove();
+  }
 }
 
 function clearStreamEdits() {
@@ -591,10 +459,12 @@ function extractObjectsFromArray(raw, key, state) {
 
 function appendStreamObjects(sectionKey, items) {
   if (!items?.length) return;
-  console.log(`[appendStreamObjects] ${sectionKey}: adding ${items.length} items`);
+  console.log(`[appendStreamObjects] ${sectionKey}: adding ${items.length} items, current entities.value.length=${entities.value.length}`);
   const list = streamPanel.value.edit?.[sectionKey] || [];
   const seen = streamPanel.value.seen?.[sectionKey];
   let added = 0;
+  let addedToEntities = 0;
+  let addedToRelations = 0;
   for (const it of items) {
     const signature = it.raw || JSON.stringify(it.obj || {});
     if (seen && seen.has(signature)) {
@@ -614,10 +484,64 @@ function appendStreamObjects(sectionKey, items) {
     };
     list.push(newItem);
     added++;
-    console.log(`[appendStreamObjects] ${sectionKey}: added item`, newItem.__id, newItem.__obj);
+    console.log(`[appendStreamObjects] ${sectionKey}: added item to edit list`, newItem.__id, newItem.__obj);
+    
+    // 实时添加到右侧列表：当检测到完整的对象时，立即显示到图谱画布右边的对象列表中
+    // 处理 entities、behaviors、rules、state_transitions 等节点类型
+    if ((sectionKey === "entities" || sectionKey === "behaviors" || sectionKey === "rules" || sectionKey === "state_transitions") && it.obj) {
+      // 使用与 newItem 相同的 id 生成逻辑
+      const entityId = newItem.__id;
+      // 检查是否已存在（通过 id 去重）
+      const exists = entities.value.some((e) => e.id === entityId);
+      if (!exists) {
+        // 根据 sectionKey 确定默认 label
+        let defaultLabel = it.obj.label || "Concept";
+        if (!it.obj.label) {
+          if (sectionKey === "behaviors") defaultLabel = "Behavior";
+          else if (sectionKey === "rules") defaultLabel = "Rule";
+          else if (sectionKey === "state_transitions") defaultLabel = "State";
+        }
+        const entity = {
+          id: entityId,
+          name: it.obj.name || "",
+          label: defaultLabel,
+          props: it.obj.props || {},
+        };
+        entities.value.push(entity);
+        addedToEntities++;
+        console.log(`[appendStreamObjects] ✅ 实时添加到 entities.value:`, entity, `当前总数: ${entities.value.length}`);
+      } else {
+        console.log(`[appendStreamObjects] ⏭️ 跳过重复的 entity:`, entityId);
+      }
+    }
+    
+    // 实时添加到关系列表
+    if (sectionKey === "relations" && it.obj) {
+      // 使用与 newItem 相同的 id 生成逻辑，但 relations 可能没有 id，需要特殊处理
+      const relationId = it.obj.id || `rel-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // 检查是否已存在（通过 id 去重，如果没有 id 则通过 src+dst+type 去重）
+      const exists = relations.value.some((r) => {
+        if (r.id && relationId) return r.id === relationId;
+        return r.src === it.obj.src && r.dst === it.obj.dst && r.type === (it.obj.type || "RELATED_TO");
+      });
+      if (!exists) {
+        const relation = {
+          id: relationId,
+          type: it.obj.type || "RELATED_TO",
+          src: it.obj.src || "",
+          dst: it.obj.dst || "",
+          props: it.obj.props || {},
+        };
+        relations.value.push(relation);
+        addedToRelations++;
+        console.log(`[appendStreamObjects] ✅ 实时添加到 relations.value:`, relation, `当前总数: ${relations.value.length}`);
+      } else {
+        console.log(`[appendStreamObjects] ⏭️ 跳过重复的 relation:`, relationId);
+      }
+    }
   }
   streamPanel.value.edit[sectionKey] = list;
-  console.log(`[appendStreamObjects] ${sectionKey}: total count now = ${list.length}, added = ${added}`);
+  console.log(`[appendStreamObjects] ${sectionKey}: edit列表总数=${list.length}, 新增=${added}, 实时添加到entities=${addedToEntities}, 实时添加到relations=${addedToRelations}`);
   updateGeneratedJson();
 }
 
@@ -629,11 +553,13 @@ function processStreamIncremental() {
   for (const key of keys) {
     const state = streamPanel.value.partial[key];
     const items = extractObjectsFromArray(raw, key, state);
-    console.log(`[processStreamIncremental] key=${key}, found ${items.length} new objects`);
+    console.log(`[processStreamIncremental] key=${key}, found ${items.length} new objects, scanPos=${state.scanPos}`);
     if (items.length > 0) {
-      console.log(`[processStreamIncremental] ${key} first item:`, items[0]);
+      console.log(`[processStreamIncremental] ${key} first item:`, JSON.stringify(items[0].obj, null, 2));
     }
-    appendStreamObjects(key, items);
+    if (items.length > 0) {
+      appendStreamObjects(key, items);
+    }
   }
 }
 
@@ -891,7 +817,7 @@ async function applyStreamEditsToDraft() {
 
 const entities = ref([]);
 const relations = ref([]);
-const nodeTab = ref("behaviors"); // behaviors | rules | states | objects | relations
+const nodeTab = ref("objects"); // objects | relations | behaviors | rules | states
 const kw = ref("");
 const query = ref({ root_id: "", depth: 3 });
 
@@ -1246,7 +1172,37 @@ async function extract() {
             streamPanel.value.parseError = "";
             updateGeneratedJson();
           }
-          toastSuccess("抽取完成：请在下方编辑后点击“确认入库（草稿图谱）”。");
+          // 合并后端返回的完整数据到 entities 和 relations 列表（避免覆盖实时添加的数据）
+          if (payload.nodes && Array.isArray(payload.nodes)) {
+            const existingIds = new Set(entities.value.map((e) => e.id));
+            for (const node of payload.nodes) {
+              if (!existingIds.has(node.id)) {
+                entities.value.push({
+                  id: node.id,
+                  name: node.name || "",
+                  label: node.label || "Concept",
+                  props: node.props || {},
+                });
+                console.log(`[done] 合并节点到 entities.value:`, node);
+              }
+            }
+          }
+          if (payload.edges && Array.isArray(payload.edges)) {
+            const existingIds = new Set(relations.value.map((r) => r.id));
+            for (const edge of payload.edges) {
+              if (!existingIds.has(edge.id)) {
+                relations.value.push({
+                  id: edge.id,
+                  type: edge.type || "RELATED_TO",
+                  src: edge.src || "",
+                  dst: edge.dst || "",
+                  props: edge.props || {},
+                });
+                console.log(`[done] 合并关系到 relations.value:`, edge);
+              }
+            }
+          }
+          toastSuccess("抽取完成：请在下方编辑后点击「确认入库（草稿图谱）」。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
         }
@@ -1989,10 +1945,8 @@ watch(
   min-height: 0;
 }
 .sidebar .left {
-  flex: 1.2;
-}
-.sidebar .right {
   flex: 1;
+  height: 100%;
 }
 .panel {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.92));
