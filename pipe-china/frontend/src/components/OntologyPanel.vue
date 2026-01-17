@@ -97,7 +97,7 @@
                 @click="selectEdgeById(e.id)"
               >
                 <div class="row-title">{{ e.type }}</div>
-                <div class="row-sub">{{ e.src }} → {{ e.dst }}</div>
+                <div class="row-sub">{{ (e.src_name || e.src) }} → {{ (e.dst_name || e.dst) }}</div>
               </div>
             </template>
             <template v-else>
@@ -404,6 +404,13 @@ function resetStreamPanel() {
   entities.value = [];
   relations.value = [];
   stateTransitions.value = [];
+  // 清空流式画布映射（name -> id、边去重、节流定时器）
+  try {
+    if (streamGraph.value.layoutTimer) clearTimeout(streamGraph.value.layoutTimer);
+  } catch {
+    // ignore
+  }
+  streamGraph.value = { nameToId: new Map(), edgeSig: new Set(), layoutTimer: null };
   // 清空图谱画布
   if (cy.value) {
     cy.value.elements().remove();
@@ -437,6 +444,59 @@ function hashStr(s) {
   return (h >>> 0).toString(16);
 }
 
+function scheduleStreamRelayout() {
+  if (!cy.value) return;
+  if (streamGraph.value.layoutTimer) return;
+  streamGraph.value.layoutTimer = setTimeout(() => {
+    streamGraph.value.layoutTimer = null;
+    try {
+      cy.value.layout({ name: "fcose", quality: "default", animate: true }).run();
+    } catch {
+      // ignore
+    }
+  }, 700);
+}
+
+function ensureCyReady() {
+  if (cy.value) return;
+  if (!cyEl.value) return;
+  buildCy([], []);
+}
+
+function addNodeToCyIfMissing(node) {
+  if (!node?.id) return;
+  ensureCyReady();
+  if (!cy.value) return;
+  if (cy.value.getElementById(node.id)?.length) return;
+  cy.value.add({ data: { id: node.id, name: node.name || "", label: node.label || "Concept", props: node.props || {} } });
+  scheduleStreamRelayout();
+}
+
+function addEdgeToCyIfMissing(edge) {
+  if (!edge?.id) return;
+  ensureCyReady();
+  if (!cy.value) return;
+  if (cy.value.getElementById(edge.id)?.length) return;
+  if (!cy.value.getElementById(edge.src)?.length) return;
+  if (!cy.value.getElementById(edge.dst)?.length) return;
+  cy.value.add({ data: { id: edge.id, source: edge.src, target: edge.dst, type: edge.type || "RELATED_TO", props: edge.props || {} } });
+  scheduleStreamRelayout();
+}
+
+function ensureStreamNodeByName(name, label = "Concept", props = {}) {
+  const nm = (name || "").toString().trim();
+  if (!nm) return "";
+  const existed = streamGraph.value.nameToId.get(nm);
+  if (existed) return existed;
+  const id = `tmp-ent-${hashStr(`${label}::${nm}`)}`;
+  streamGraph.value.nameToId.set(nm, id);
+  if (!entities.value.some((e) => e.id === id)) {
+    entities.value.push({ id, name: nm, label, props: props || {} });
+  }
+  addNodeToCyIfMissing({ id, name: nm, label, props: props || {} });
+  return id;
+}
+
 function addStreamObjectToUI(sectionKey, obj, rawStr) {
   if (!obj || typeof obj !== "object") return;
 
@@ -446,22 +506,31 @@ function addStreamObjectToUI(sectionKey, obj, rawStr) {
     if (!name) return;
     const label = (obj.label || "Concept").toString().trim() || "Concept";
     const id = `tmp-ent-${hashStr(`${label}::${name}`)}`;
+    if (!streamGraph.value.nameToId.get(name)) streamGraph.value.nameToId.set(name, id);
     if (!entities.value.some((e) => e.id === id)) {
       entities.value.push({ id, name, label, props: obj.props || {} });
     }
+    addNodeToCyIfMissing({ id, name, label, props: obj.props || {} });
     return;
   }
 
   // relations：关系列表（type/src/dst/props）
   if (sectionKey === "relations") {
     const type = (obj.type || "RELATED_TO").toString().trim() || "RELATED_TO";
-    const src = (obj.src || "").toString().trim();
-    const dst = (obj.dst || "").toString().trim();
-    if (!src || !dst) return;
-    const id = `tmp-rel-${hashStr(`${type}::${src}::${dst}`)}`;
+    const srcName = (obj.src || "").toString().trim();
+    const dstName = (obj.dst || "").toString().trim();
+    if (!srcName || !dstName) return;
+    const srcId = streamGraph.value.nameToId.get(srcName) || ensureStreamNodeByName(srcName, "Concept", { source: "stream" });
+    const dstId = streamGraph.value.nameToId.get(dstName) || ensureStreamNodeByName(dstName, "Concept", { source: "stream" });
+    if (!srcId || !dstId) return;
+    const sig = `${type}::${srcId}::${dstId}`;
+    if (streamGraph.value.edgeSig.has(sig)) return;
+    streamGraph.value.edgeSig.add(sig);
+    const id = `tmp-rel-${hashStr(sig)}`;
     if (!relations.value.some((r) => r.id === id)) {
-      relations.value.push({ id, type, src, dst, props: obj.props || {} });
+      relations.value.push({ id, type, src: srcId, dst: dstId, src_name: srcName, dst_name: dstName, props: obj.props || {} });
     }
+    addEdgeToCyIfMissing({ id, type, src: srcId, dst: dstId, props: obj.props || {} });
     return;
   }
 
@@ -473,6 +542,7 @@ function addStreamObjectToUI(sectionKey, obj, rawStr) {
     if (!entities.value.some((e) => e.id === id)) {
       entities.value.push({ id, name, label: "Behavior", props: obj });
     }
+    addNodeToCyIfMissing({ id, name, label: "Behavior", props: obj });
     return;
   }
 
@@ -484,6 +554,7 @@ function addStreamObjectToUI(sectionKey, obj, rawStr) {
     if (!entities.value.some((e) => e.id === id)) {
       entities.value.push({ id, name, label: "Rule", props: obj });
     }
+    addNodeToCyIfMissing({ id, name, label: "Rule", props: obj });
     return;
   }
 
@@ -1111,6 +1182,11 @@ async function applyStreamEditsToDraft() {
 const entities = ref([]);
 const relations = ref([]);
 const stateTransitions = ref([]); // 对应提示词里的 state_transitions（状态）
+const streamGraph = ref({
+  nameToId: new Map(), // name -> nodeId
+  edgeSig: new Set(), // `${type}::${srcId}::${dstId}`
+  layoutTimer: null,
+});
 const nodeTab = ref("objects"); // objects | relations | behaviors | rules | states
 const kw = ref("");
 const query = ref({ root_id: "", depth: 3 });
@@ -1481,6 +1557,9 @@ async function extract() {
           // done 后切换为“真实 draft 图”（带稳定 id），便于画布/编辑/入库
           if (payload.nodes && Array.isArray(payload.nodes)) entities.value = payload.nodes;
           if (payload.edges && Array.isArray(payload.edges)) relations.value = payload.edges;
+          if (payload.nodes && Array.isArray(payload.nodes) && payload.edges && Array.isArray(payload.edges)) {
+            buildCy(payload.nodes, payload.edges);
+          }
           toastSuccess("抽取完成：请在下方编辑后点击「确认入库（草稿图谱）」。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
