@@ -466,6 +466,14 @@ function resetStreamPanel() {
     behaviors: new Set(),
     state_transitions: new Set(),
   };
+  streamPanel.value.edit = {
+    entities: [],
+    relations: [],
+    rules: [],
+    behaviors: [],
+    state_transitions: [],
+  };
+  streamPanel.value.generatedJson = "";
   streamPanel.value.pendingClear = true;
 }
 
