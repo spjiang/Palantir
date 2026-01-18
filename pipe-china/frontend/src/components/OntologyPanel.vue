@@ -471,11 +471,19 @@ function addNodeToCyIfMissing(node) {
   if (!node?.id) return;
   ensureCyReady();
   if (!cy.value) return;
-  if (cy.value.getElementById(node.id)?.length) return;
+  const existed = cy.value.getElementById(node.id);
   const displayName = (node.name || "").toString().trim() || node.id;
-  cy.value.add({
-    data: { id: node.id, name: node.name || "", displayName, label: node.label || "Concept", props: node.props || {} },
-  });
+  if (existed?.length) {
+    // 升级占位节点（比如 Concept -> Sensor），更新 label/name/displayName/props
+    existed.data("name", node.name || "");
+    existed.data("displayName", displayName);
+    existed.data("label", node.label || "Concept");
+    existed.data("props", node.props || {});
+  } else {
+    cy.value.add({
+      data: { id: node.id, name: node.name || "", displayName, label: node.label || "Concept", props: node.props || {} },
+    });
+  }
   scheduleStreamRelayout();
 }
 
@@ -495,9 +503,14 @@ function ensureStreamNodeByName(name, label = "Concept", props = {}) {
   if (!nm) return "";
   const existed = streamGraph.value.nameToId.get(nm);
   if (existed) return existed;
-  const id = `tmp-ent-${hashStr(`${label}::${nm}`)}`;
+  // 关键：流式阶段同一个“名字”只能对应一个临时节点 id（不能把 label 参与进来，否则会出现 Concept 占位 + 实体真实 label 两条重复）
+  const id = `tmp-n-${hashStr(nm)}`;
   streamGraph.value.nameToId.set(nm, id);
-  if (!entities.value.some((e) => e.id === id)) {
+  const idx = entities.value.findIndex((e) => e.id === id || e.name === nm);
+  if (idx >= 0) {
+    // 更新占位节点（比如从 Concept 升级成 Sensor/PipelineSegment）
+    entities.value[idx] = { ...entities.value[idx], id, name: nm, label: label || entities.value[idx].label, props: props || entities.value[idx].props || {} };
+  } else {
     entities.value.push({ id, name: nm, label, props: props || {} });
   }
   addNodeToCyIfMissing({ id, name: nm, label, props: props || {} });
@@ -512,12 +525,14 @@ function addStreamObjectToUI(sectionKey, obj, rawStr) {
     const name = (obj.name || "").toString().trim();
     if (!name) return;
     const label = (obj.label || "Concept").toString().trim() || "Concept";
-    const id = `tmp-ent-${hashStr(`${label}::${name}`)}`;
-    if (!streamGraph.value.nameToId.get(name)) streamGraph.value.nameToId.set(name, id);
-    if (!entities.value.some((e) => e.id === id)) {
-      entities.value.push({ id, name, label, props: obj.props || {} });
-    }
-    addNodeToCyIfMissing({ id, name, label, props: obj.props || {} });
+    // 用 nameToId 做统一 id（保证不会重复）；如果之前因为 relation 占位创建过节点，这里只做“更新”
+    const id = streamGraph.value.nameToId.get(name) || `tmp-n-${hashStr(name)}`;
+    streamGraph.value.nameToId.set(name, id);
+    const idx = entities.value.findIndex((e) => e.id === id || e.name === name);
+    const next = { id, name, label, props: obj.props || {} };
+    if (idx >= 0) entities.value[idx] = { ...entities.value[idx], ...next };
+    else entities.value.push(next);
+    addNodeToCyIfMissing(next);
     return;
   }
 

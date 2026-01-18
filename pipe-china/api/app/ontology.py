@@ -548,6 +548,9 @@ class OntologyStore:
         edges: dict[str, Relation] = {}
         # 以 (label,name) 为主键的索引，用于去重同类同名节点（不同类型允许同名共存）
         key_to_id: dict[str, str] = {}
+        # 以 name 为主键的“优选节点 id”（用于 relations/behaviors/rules 里仅给了 name 的场景）
+        # 规则：优先选择非 Concept 的实体（例如 PipelineSegment/Sensor/...），避免生成同名 Concept 重复节点
+        name_to_preferred_id: dict[str, str] = {}
 
         # entities（对象/状态/行为/证据等都作为实体节点承载，label 决定类型）
         for ent in payload.get("entities", []):
@@ -564,16 +567,31 @@ class OntologyStore:
                 eid = ent_id(name, label)
                 key_to_id[key] = eid
             nodes[eid] = Entity(id=eid, name=name, label=label, props=props)
+            # 更新 name -> preferred id：优先使用非 Concept 的 label
+            if label != "Concept":
+                name_to_preferred_id[name] = eid
+            elif name not in name_to_preferred_id:
+                name_to_preferred_id[name] = eid
 
         # relations（若实体缺失则补 Concept）
         def ensure_node(nm: str, label: str = "Concept") -> str:
             nm = nm.strip()
+            # 对于“只有 name 的引用”（relations/behaviors/rules/produces/inputs/outputs 等），
+            # 优先复用 entities 里已抽到的同名节点，避免生成同名不同 label 的重复节点。
+            # 典型问题：produces 里写了“运维任务”，代码用 ensure_node(...,"Artifact") 会额外生成 Artifact::运维任务，
+            # 但 entities 已经定义 MaintenanceTask::运维任务，应复用它。
+            if nm in name_to_preferred_id and label in {"Concept", "Artifact", "Evidence"}:
+                return name_to_preferred_id[nm]
             key = f"{label}::{nm}"
             if key in key_to_id:
                 return key_to_id[key]
             eid = ent_id(nm, label)
             nodes[eid] = Entity(id=eid, name=nm, label=label, props={"source": "deepseek"})
             key_to_id[key] = eid
+            if label != "Concept":
+                name_to_preferred_id[nm] = eid
+            elif nm not in name_to_preferred_id:
+                name_to_preferred_id[nm] = eid
             return eid
 
         for rel in payload.get("relations", []):
