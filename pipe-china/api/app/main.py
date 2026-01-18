@@ -6,7 +6,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .deps import store
+from .deps import pg, store
 from .layers.l1_data_ingestion_governance.router import router as l1_router
 from .layers.l2_ontology_semantics.router import router as l2_router
 from .layers.l3_risk_reasoning_models.router import router as l3_router
@@ -29,7 +29,13 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"ok": store.health()}
+    ok_pg = True
+    try:
+        if pg:
+            pg.connect()
+    except Exception:
+        ok_pg = False
+    return {"ok": store.health(), "pg": ok_pg}
 
 
 # -------- 路由挂载（按 L1~L6 拆分）--------
@@ -44,4 +50,6 @@ app.include_router(l6_router)
 @app.on_event("shutdown")
 def shutdown_event():
     store.close()
+    if pg:
+        pg.close()
 
