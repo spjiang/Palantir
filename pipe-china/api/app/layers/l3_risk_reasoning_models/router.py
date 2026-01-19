@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -323,15 +324,28 @@ def _ensure_l3_alarm(
     reading_id: str | None,
     rule: dict[str, Any],
     message: str,
+    inference_id: str | None = None,
 ) -> str:
     """
     L3 生成“预警/告警结论”：
     - 写入 PG alarms（source=l3, rule_id）
-    - 幂等去重：同一 reading_id + rule_id 只写一次
+    - 幂等去重：
+      1) 同一 reading_id + rule_id 只写一次
+      2) 无 reading_id 时，用 inference_id + rule_id 去重（用于 LLM 推理结果）
     """
     rule_id = str(rule.get("id") or "")
     if reading_id and rule_id:
-        exists = pg.fetchone("SELECT id FROM alarms WHERE reading_id=%s AND raw->>'rule_id'=%s LIMIT 1;", (reading_id, rule_id))
+        exists = pg.fetchone(
+            "SELECT id FROM alarms WHERE segment_id=%s AND reading_id=%s AND raw->>'source'='l3' AND raw->>'rule_id'=%s LIMIT 1;",
+            (segment_id, reading_id, rule_id),
+        )
+        if exists and exists.get("id"):
+            return exists["id"]
+    if inference_id and rule_id:
+        exists = pg.fetchone(
+            "SELECT id FROM alarms WHERE segment_id=%s AND raw->>'source'='l3' AND raw->>'rule_id'=%s AND raw->>'inference_id'=%s LIMIT 1;",
+            (segment_id, rule_id, inference_id),
+        )
         if exists and exists.get("id"):
             return exists["id"]
     a = pg.create_alarm(
@@ -344,6 +358,7 @@ def _ensure_l3_alarm(
         raw={
             "source": "l3",
             "draft_id": draft_id,
+            "inference_id": inference_id,
             "rule_id": rule_id,
             "metric": rule.get("metric"),
             "op": rule.get("op"),
@@ -356,7 +371,7 @@ def _ensure_l3_alarm(
 class RiskEvaluateRequest(BaseModel):
     draft_id: str | None = Field(default=None, description="可选：使用草稿本体规则/行为（draft_id）")
     segment_id: str = Field(..., description="L1 管段ID（seg-xxx）")
-    write_back_to_draft: bool = Field(default=True, description="是否把风险状态回写到 L2 草稿图谱")
+    write_back_to_draft: bool = Field(default=True, description="是否把风险状态回写到 L2 临时本体库")
     reasoning_mode: str = Field(default="auto", description="auto|rule_engine|deepseek；auto=有 DEEPSEEK key 则 deepseek 否则 rule_engine")
 
 
@@ -369,6 +384,8 @@ class RiskSyncRequest(BaseModel):
     limit: int = Field(default=10, description="最多同步多少个管段（按 L1 管段列表顺序）")
     reasoning_mode: str = Field(default="deepseek", description="deepseek|rule_engine|auto")
     write_back_to_draft: bool = Field(default=True, description="是否回写草稿状态/实例关系")
+    only_changed: bool = Field(default=True, description="仅对‘读数/告警发生变化’的管段做推理（增量触发）")
+    max_llm_calls: int = Field(default=10, description="本次同步最多调用多少次 DeepSeek（成本闸门）")
 
 
 @router.get("/risk/topn")
@@ -503,20 +520,54 @@ def risk_sync(payload: RiskSyncRequest):
     """
     _require_pg()
     limit = max(1, min(int(payload.limit or 10), 50))
+    max_llm_calls = max(0, min(int(payload.max_llm_calls or 0), 200))
     segs = pg.list_segments()[:limit]
     results: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
+    llm_calls = 0
 
     for seg in segs:
         try:
+            # 增量触发：仅处理“读数/告警发生变化”的管段（需要 draft_id 才能有稳定的 sync_state 维度）
+            if payload.only_changed and payload.draft_id:
+                act = pg.get_latest_segment_activity(segment_id=seg["id"])
+                st = pg.get_l3_sync_state(draft_id=payload.draft_id, segment_id=seg["id"])
+                if st:
+                    last_r = st.get("last_reading_ts")
+                    last_a = st.get("last_alarm_ts")
+                    rts = act.get("last_reading_ts")
+                    ats = act.get("last_alarm_ts")
+                    no_new_r = (rts is None) or (last_r is not None and rts <= last_r)
+                    no_new_a = (ats is None) or (last_a is not None and ats <= last_a)
+                    if no_new_r and no_new_a:
+                        continue
+
+            # 成本闸门：LLM 调用预算耗尽后，自动降级为 rule_engine（避免同步“越跑越贵”）
+            mode = payload.reasoning_mode
+            if (mode or "").strip().lower() in {"deepseek", "auto"} and max_llm_calls > 0 and llm_calls >= max_llm_calls:
+                mode = "rule_engine"
+
             out = risk_evaluate(
                 RiskEvaluateRequest(
                     draft_id=payload.draft_id,
                     segment_id=seg["id"],
                     write_back_to_draft=payload.write_back_to_draft,
-                    reasoning_mode=payload.reasoning_mode,
+                    reasoning_mode=mode,
                 )
             )
+            if out.get("reasoning_mode") == "deepseek":
+                llm_calls += 1
+
+            # 记录本次同步状态（用于下一次 only_changed）
+            if payload.draft_id:
+                act = pg.get_latest_segment_activity(segment_id=seg["id"])
+                pg.upsert_l3_sync_state(
+                    draft_id=payload.draft_id,
+                    segment_id=seg["id"],
+                    last_reading_ts=act.get("last_reading_ts"),
+                    last_alarm_ts=act.get("last_alarm_ts"),
+                    last_reasoning_mode=str(out.get("reasoning_mode") or ""),
+                )
             # 统一字段，供前端直接展示“管段风险 TopN”
             results.append(
                 {
@@ -541,6 +592,8 @@ def risk_sync(payload: RiskSyncRequest):
         "draft_id": payload.draft_id,
         "processed": len(results),
         "failed": len(errors),
+        "llm_calls": llm_calls,
+        "max_llm_calls": max_llm_calls,
         "errors": errors[:20],
         "topn": results[: max(1, min(limit, 100))],
     }
@@ -548,13 +601,14 @@ def risk_sync(payload: RiskSyncRequest):
 @router.post("/risk/evaluate")
 def risk_evaluate(payload: RiskEvaluateRequest):
     """
-    评估单个管段风险，并（可选）回写到 L2 草稿图谱：
+    评估单个管段风险，并（可选）回写到 L2 临时本体库：
     - 创建/更新 PipelineSegment/Sensor 节点（来源 L1）
     - 维护 has_sensor
     - 维护 in_state
     同时写入 Postgres risk_events，供 L6 追溯。
     """
     _require_pg()
+    inference_id = f"inf-{uuid.uuid4().hex[:10]}"
     seg = pg.fetchone("SELECT * FROM pipeline_segments WHERE id=%s;", (payload.segment_id,))
     if not seg:
         raise HTTPException(404, "segment not found")
@@ -674,7 +728,15 @@ def risk_evaluate(payload: RiskEvaluateRequest):
                 }
                 msg = (a.get("message") or "").strip() or f"{rule_obj.get('name')}: 命中规则（DeepSeek）"
                 try:
-                    aid = _ensure_l3_alarm(draft_id=payload.draft_id, segment_id=seg["id"], sensor_id=sensor_id, reading_id=reading_id, rule=rule_obj, message=msg)
+                    aid = _ensure_l3_alarm(
+                        draft_id=payload.draft_id,
+                        segment_id=seg["id"],
+                        sensor_id=sensor_id,
+                        reading_id=reading_id,
+                        rule=rule_obj,
+                        message=msg,
+                        inference_id=inference_id,
+                    )
                     derived_alarm_ids.append(aid)
                 except Exception:
                     pass
@@ -704,7 +766,15 @@ def risk_evaluate(payload: RiskEvaluateRequest):
                     sid = latest_sensor_id_by_metric.get(metric)
                     msg = f"{r.get('name') or r.get('id')}: {metric} {op} {thr}（当前 {v}）"
                     try:
-                        aid = _ensure_l3_alarm(draft_id=payload.draft_id, segment_id=seg["id"], sensor_id=sid, reading_id=rid, rule=r, message=msg)
+                        aid = _ensure_l3_alarm(
+                            draft_id=payload.draft_id,
+                            segment_id=seg["id"],
+                            sensor_id=sid,
+                            reading_id=rid,
+                            rule=r,
+                            message=msg,
+                            inference_id=inference_id,
+                        )
                         derived_alarm_ids.append(aid)
                     except Exception:
                         # 告警结论写入失败不影响风险结论主体
@@ -719,12 +789,13 @@ def risk_evaluate(payload: RiskEvaluateRequest):
         risk_state=state,
         explain=explain,
         evidence={
+            "inference_id": inference_id,
             "alarms": list({*(a.get("id") for a in alarms[:20] if a.get("id")), *derived_alarm_ids}),
             "readings": [r.get("id") for r in readings[:20]],
         },
     )
 
-    # 回写草稿图谱（让 L2/L4 可视化“当前状态”）
+    # 回写临时本体库（让 L2/L4 可视化“当前状态”）
     if payload.draft_id and payload.write_back_to_draft:
         try:
             _ensure_l1_objects_in_draft(payload.draft_id, seg, sensors)

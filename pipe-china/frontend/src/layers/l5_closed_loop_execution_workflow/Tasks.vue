@@ -1,7 +1,7 @@
 <template>
   <div class="card">
     <h2>L5 · 任务列表</h2>
-    <p class="sub">真实任务管理：创建任务 → 绑定草稿图谱（targets/has_evidence）→ 状态流转 → 证据回传。</p>
+    <p class="sub">真实任务管理：创建任务 → 绑定临时本体库（targets/has_evidence）→ 状态流转 → 证据回传。</p>
 
     <div class="row">
       <div class="card">
@@ -16,7 +16,7 @@
             <input v-model="form.task_type" placeholder="例如：巡检/处置/复核" />
           </div>
           <div>
-            <label>绑定草稿图谱 draftId（可选）</label>
+            <label>绑定临时本体库 draftId（可选）</label>
             <input v-model="form.draft_id" class="mono" placeholder="draft-xxxx" />
             <div class="hint">
               当前草稿：<span class="mono">{{ currentDraftId || "（无）" }}</span>
@@ -89,6 +89,28 @@
       <h3>任务详情 · {{ selectedTask.title }}</h3>
       <div class="row">
         <div class="card">
+          <h4>动作编排（Action Plan）</h4>
+          <div class="hint">action_plan：由 L4 生成（或兜底策略生成），L5 可逐步执行并记录 action_runs（MVP：模拟执行）。</div>
+          <div class="actions">
+            <button class="btn secondary" :disabled="loading" @click="loadActions">刷新动作</button>
+            <button class="btn" :disabled="loading || !actionPlan.length" @click="runNextAction">执行下一步</button>
+          </div>
+          <div v-if="!actionPlan.length" class="hint">暂无 action_plan（可从 L3→L4 派单生成带 action_plan 的任务）</div>
+          <ul class="ul" v-else>
+            <li v-for="(a, idx) in actionPlan" :key="idx">
+              <span class="mono">#{{ idx + 1 }}</span> · {{ a.action_type }} · <span class="mono">{{ JSON.stringify(a.params || {}) }}</span>
+            </li>
+          </ul>
+          <h4 style="margin-top: 12px">动作执行记录（action_runs）</h4>
+          <ul class="ul">
+            <li v-for="r in actionRuns" :key="r.id">
+              <span class="mono">{{ r.id }}</span> · seq={{ r.seq }} · {{ r.action_type }} · status={{ r.status }}
+            </li>
+            <li v-if="!actionRuns.length" class="hint">暂无执行记录</li>
+          </ul>
+        </div>
+
+        <div class="card">
           <h4>证据</h4>
           <div class="grid">
             <div>
@@ -155,6 +177,8 @@ const selectedTask = ref(null);
 
 const evidence = ref([]);
 const timeline = ref([]);
+const actionPlan = ref([]);
+const actionRuns = ref([]);
 
 const targetCandidates = ref([]);
 
@@ -266,8 +290,66 @@ function selectTask(t) {
   selectedTask.value = t;
   evidence.value = [];
   timeline.value = [];
+  actionPlan.value = [];
+  actionRuns.value = [];
   loadEvidence();
   loadTimeline();
+  loadActions();
+}
+
+async function loadActions() {
+  if (!selectedTask.value) return;
+  loading.value = true;
+  err.value = "";
+  try {
+    const data = await fetch(`${props.apiBase}/workflow/tasks/${encodeURIComponent(selectedTask.value.id)}/actions`).then((r) =>
+      r.ok ? r.json() : Promise.reject(new Error(r.statusText))
+    );
+    actionPlan.value = data.action_plan || [];
+    actionRuns.value = data.runs || [];
+  } catch (e) {
+    err.value = String(e);
+    actionPlan.value = [];
+    actionRuns.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function runNextAction() {
+  if (!selectedTask.value) return;
+  if (!actionPlan.value.length) return;
+  const doneSeq = new Set((actionRuns.value || []).map((r) => Number(r.seq)));
+  const nextIdx = actionPlan.value.findIndex((_, i) => !doneSeq.has(i + 1));
+  if (nextIdx < 0) {
+    alert("action_plan 已全部执行（MVP：按 seq 判断）。");
+    return;
+  }
+  const a = actionPlan.value[nextIdx] || {};
+  const seq = nextIdx + 1;
+  loading.value = true;
+  err.value = "";
+  try {
+    const payload = {
+      seq,
+      action_type: a.action_type || `action_${seq}`,
+      params: a.params || {},
+      status: "done",
+      result: { ok: true, simulated: true },
+      draft_id: selectedTask.value.draft_id || null,
+    };
+    const res = await fetch(`${props.apiBase}/workflow/tasks/${encodeURIComponent(selectedTask.value.id)}/actions/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await loadActions();
+  } catch (e) {
+    err.value = String(e);
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function loadEvidence() {

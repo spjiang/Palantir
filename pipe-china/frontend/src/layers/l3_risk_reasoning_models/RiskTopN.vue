@@ -365,11 +365,13 @@ async function fetchTopN() {
 
 async function syncFromL1() {
   if (!draftId.value) {
-    alert("请先填写/读取 draftId（同步需要从草稿图谱读取规则/行为）。");
+    alert("请先填写/读取 draftId（同步需要从临时本体库读取规则/行为）。");
     return;
   }
   loading.value = true;
   try {
+    const maxLlmCalls = Number(sessionStorage.getItem("pipe-china:l3sync:max_llm_calls") || "10");
+    const onlyChanged = (sessionStorage.getItem("pipe-china:l3sync:only_changed") || "true") !== "false";
     const res = await api("/risk/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -378,6 +380,8 @@ async function syncFromL1() {
         limit: 10,
         reasoning_mode: evalReasoningMode.value || "deepseek",
         write_back_to_draft: true,
+        only_changed: onlyChanged,
+        max_llm_calls: Number.isFinite(maxLlmCalls) ? maxLlmCalls : 10,
       }),
     });
     syncResp.value = res;
@@ -385,7 +389,8 @@ async function syncFromL1() {
     items.value = res.topn || [];
     // 同步后通常会产生 L3 预警结论，刷新预警 TopN
     await fetchAlertTopN();
-    alert(`同步完成：成功 ${res.processed} 条，失败 ${res.failed} 条`);
+    const llmMsg = typeof res.llm_calls === "number" ? `，DeepSeek 调用 ${res.llm_calls}/${res.max_llm_calls}` : "";
+    alert(`同步完成：成功 ${res.processed} 条，失败 ${res.failed}${llmMsg}`);
   } catch (e) {
     console.error(e);
     alert(`同步失败：${e.message}`);
@@ -460,7 +465,7 @@ async function evaluateOne() {
 
 async function agentDecide() {
   if (!draftId.value) {
-    alert("请先填写/读取 draftId（L4 需要在草稿图谱中写回任务 targets）。");
+    alert("请先填写/读取 draftId（L4 需要在临时本体库中写回任务 targets）。");
     return;
   }
   loading.value = true;
@@ -482,7 +487,7 @@ async function agentDecide() {
 
 async function dispatchFromSegment(it) {
   if (!draftId.value) {
-    alert("请先填写/读取 draftId（L4 需要在草稿图谱中写回任务 targets）。");
+    alert("请先填写/读取 draftId（L4 需要在临时本体库中写回任务 targets）。");
     return;
   }
   const seg = it?.segment_id || segmentId.value;
@@ -521,7 +526,7 @@ async function dispatchFromSegment(it) {
 
 async function pushAlertToL4(alarmId) {
   if (!draftId.value) {
-    alert("请先填写/读取 draftId（用于查询行为本体并回写任务到草稿图谱）。");
+    alert("请先填写/读取 draftId（用于查询行为本体并回写任务到临时本体库）。");
     return;
   }
   loading.value = true;

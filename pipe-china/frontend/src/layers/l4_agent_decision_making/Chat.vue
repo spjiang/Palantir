@@ -1,7 +1,7 @@
 <template>
   <div class="card">
     <h2>L4 · 智能体决策（基于 L2 行为/规则）</h2>
-    <p>这里先做一个“可跑通闭环”的确定性智能体：读取 L3 最新风险事件 + L2 草稿行为定义，生成 L5 任务并写回草稿图谱。</p>
+    <p>这里先做一个“可跑通闭环”的确定性智能体：读取 L3 最新风险事件 + L2 临时本体库行为定义，生成 L5 任务并写回临时本体库。</p>
 
     <div class="grid2">
       <div class="card subcard">
@@ -41,7 +41,7 @@
             <button class="btn" :disabled="loading || !draftId || !selectedTopN" @click="decideFromTopN">一键生成任务（基于 TopN）</button>
           </div>
           <div class="muted small" style="margin-top: 8px">
-            说明：L4 会使用所选 TopN 的 <b>管段属性（segment_id）</b> 去草稿图谱查询行为；若是“预警 TopN”，还会携带 rule_id→Behavior 约束关系，决策更精准。
+            说明：L4 会使用所选 TopN 的 <b>管段属性（segment_id）</b> 去临时本体库查询行为；若是“预警 TopN”，还会携带 rule_id→Behavior 约束关系，决策更精准。
           </div>
         </div>
 

@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from ...deps import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, store
+from ...deps import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, pg, store
 from ...models import (
     DraftCommitRequest,
     DraftExtractResponse,
@@ -27,6 +27,14 @@ from ...models import (
 logger = logging.getLogger("pipe_china.api")
 
 router = APIRouter(tags=["L2-OntologySemantics"])
+
+def _require_pg():
+    if not pg:
+        raise HTTPException(500, "PG_DSN not configured")
+    try:
+        pg.connect()
+    except Exception as e:
+        raise HTTPException(500, f"Postgres not ready: {e}")
 
 
 @router.get("/ontology/drafts")
@@ -54,7 +62,7 @@ async def extract_ontology(file: UploadFile = File(...)):
             base_url=DEEPSEEK_BASE_URL,
             model=DEEPSEEK_MODEL,
         )
-        # 写入“临时图谱”（与正式图谱隔离），供该文档的图查询/编辑使用
+        # 写入“临时本体库”（与正式本体库隔离），供该文档的查询/编辑使用
         store.save_draft(draft_id, nodes, edges)
         return DraftExtractResponse(draft_id=draft_id, nodes=nodes, edges=edges)
     except HTTPException:
@@ -102,7 +110,7 @@ async def extract_ontology_stream(file: UploadFile = File(...)):
                     yield sse("token", {"text": item.get("data", "")})
                 elif item.get("event") == "done":
                     data = item.get("data") or {}
-                    # 写入“临时图谱”（与正式图谱隔离），供该文档的图查询/编辑使用
+                    # 写入“临时本体库”（与正式本体库隔离），供该文档的查询/编辑使用
                     draft_id = data.get("draft_id")
                     nodes = data.get("nodes") or []
                     edges = data.get("edges") or []
@@ -170,6 +178,28 @@ def list_draft_relations(draft_id: str, limit: int = 5000):
         return store.list_draft_relations(draft_id, limit=limit)
     except Exception as e:
         raise HTTPException(500, f"list draft relations failed: {e}")
+
+
+@router.get("/ontology/stats")
+def formal_stats():
+    """
+    正式本体库统计（不受 /ontology/relations limit 影响）。
+    """
+    try:
+        return store.formal_stats()
+    except Exception as e:
+        raise HTTPException(500, f"formal stats failed: {e}")
+
+
+@router.get("/ontology/drafts/{draft_id}/stats")
+def draft_stats(draft_id: str):
+    """
+    临时本体库统计（按 draft_id 隔离）。
+    """
+    try:
+        return store.draft_stats(draft_id)
+    except Exception as e:
+        raise HTTPException(500, f"draft stats failed: {e}")
 
 
 @router.post("/ontology/drafts/{draft_id}/entities", response_model=Entity)
@@ -251,9 +281,46 @@ def delete_draft_relation(draft_id: str, rel_id: str):
 
 
 @router.post("/ontology/drafts/{draft_id}/commit", response_model=ImportResult)
-def commit_draft(draft_id: str, delete_after: bool = True):
+def commit_draft(draft_id: str, delete_after: bool = True, note: str | None = None, actor: str | None = None):
     try:
-        created_nodes, created_edges = store.commit_draft_id(draft_id, delete_after=delete_after)
+        _require_pg()
+        # 1) 取草稿快照
+        nodes = store.list_draft_entities(draft_id, limit=5000)
+        edges = store.list_draft_relations(draft_id, limit=20000)
+        nodes_json = [n.model_dump() for n in nodes]
+        edges_json = [e.model_dump() for e in edges]
+
+        # 2) 发布前备份当前正式本体库（用于回滚）
+        formal_nodes = store.list_entities(limit=5000)
+        formal_edges = store.list_relations(limit=20000)
+        if formal_nodes or formal_edges:
+            pg.add_ontology_release(
+                draft_id=None,
+                note=f"auto-backup before publish draft_id={draft_id}",
+                nodes=[n.model_dump() for n in formal_nodes],
+                edges=[e.model_dump() for e in formal_edges],
+            )
+            pg.add_audit(actor=actor, action="ontology.backup", payload={"draft_id": draft_id, "note": "auto-backup"})
+
+        # 3) 发布：替换正式本体库
+        store.purge_formal()
+        created_nodes, created_edges = store.commit_draft(nodes, edges)
+
+        # 4) 记录发布版本
+        rel = pg.add_ontology_release(
+            draft_id=draft_id,
+            note=note or f"publish draft_id={draft_id}",
+            nodes=nodes_json,
+            edges=edges_json,
+        )
+        pg.add_audit(actor=actor, action="ontology.publish", payload={"draft_id": draft_id, "release_id": rel.get("id"), "note": note})
+
+        # 5) 需要的话删除草稿
+        if delete_after:
+            try:
+                store.delete_draft(draft_id)
+            except Exception:
+                pass
         return ImportResult(
             created_nodes=created_nodes,
             created_edges=created_edges,
@@ -262,10 +329,39 @@ def commit_draft(draft_id: str, delete_after: bool = True):
             mode="commit",
             llm_enabled=True,
             fallback_used=False,
-            message=f"入库成功（draft_id={draft_id}）",
+            message=f"发布成功（draft_id={draft_id}，release_id={rel.get('id')}）",
         )
     except Exception as e:
         raise HTTPException(500, f"commit draft failed: {e}")
+
+
+@router.get("/ontology/releases")
+def list_releases(limit: int = 50):
+    _require_pg()
+    return {"items": pg.list_ontology_releases(limit=limit)}
+
+
+@router.post("/ontology/releases/{release_id}/rollback")
+def rollback_release(release_id: str, actor: str | None = None):
+    """
+    回滚正式本体库到某个发布版本（最小实现：purge formal -> replay snapshot）。
+    """
+    _require_pg()
+    rel = pg.get_ontology_release(release_id)
+    if not rel:
+        raise HTTPException(404, "release not found")
+    nodes = rel.get("nodes") or []
+    edges = rel.get("edges") or []
+    try:
+        store.purge_formal()
+        created_nodes, created_edges = store.commit_draft(
+            [Entity(**n) for n in nodes],
+            [Relation(**e) for e in edges],
+        )
+        pg.add_audit(actor=actor, action="ontology.rollback", payload={"release_id": release_id, "created_nodes": created_nodes, "created_edges": created_edges})
+        return {"ok": True, "release_id": release_id, "created_nodes": created_nodes, "created_edges": created_edges}
+    except Exception as e:
+        raise HTTPException(500, f"rollback failed: {e}")
 
 
 @router.post("/ontology/drafts/{draft_id}/behavior_model/init", response_model=dict)
@@ -412,9 +508,12 @@ def init_behavior_model(draft_id: str):
         )
 
     # affects
-    for b in [beh_detect, beh_assess, beh_decide, beh_verify]:
+    # 每个 Behavior 必须至少挂 1 个对象（commit 时会校验），这里统一补齐“作用于”关系。
+    for b in [beh_detect, beh_assess, beh_decide, beh_exec, beh_verify]:
         link_affects(b.id, obj_seg.id)
     link_affects(beh_detect.id, obj_sensor.id)
+    # 执行处置的直接输入是运维任务，因此也挂载到“运维任务”对象，便于 L4/L5 串联可执行闭环
+    link_affects(beh_exec.id, obj_task.id)
     # produces
     link_produces(beh_detect.id, obj_alarm.id)
     link_produces(beh_decide.id, obj_task.id)

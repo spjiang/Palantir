@@ -3,8 +3,8 @@
     <OntologyPanel
       :api-base="apiBase"
       scope="draft"
-      title="临时图谱（当前文档）"
-      subtitle="上传业务方案 → DeepSeek 抽取 → 存入临时图谱 → 图查询/编辑 → 确认后入库正式图谱"
+      title="临时本体库（当前文档）"
+      subtitle="上传业务方案 → DeepSeek 抽取 → 存入临时本体库 → 查询/编辑 → 确认后入库正式本体库"
       :draft-id="draftId"
       @draft-created="onDraftCreated"
       @draft-cleared="onDraftCleared"
@@ -52,7 +52,7 @@ function onDraftCleared() {
   draftId.value = "";
 }
 function onCommitted() {
-  // 正式图谱页面会自行刷新；这里不需要额外操作
+  // 正式本体库页面会自行刷新；这里不需要额外操作
 }
 </script>
 

@@ -96,7 +96,7 @@
         <button class="btn danger" :disabled="busy" @click="purgeSensingAndAlerts">清空感知/预警数据</button>
       </div>
       <div class="muted" style="margin-top: 8px">
-        提示：L1 只写事实读数，不产生预警。请到 L3 风险推理/模型根据 L2 行为/规则生成预警结论（并回写到告警表/图谱）。
+        提示：L1 只写事实读数，不产生预警。请到 L3 风险推理/模型根据 L2 行为/规则生成预警结论（并回写到告警表/本体库）。
       </div>
     </div>
 

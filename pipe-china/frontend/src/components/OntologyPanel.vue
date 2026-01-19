@@ -10,7 +10,7 @@
         <template v-if="scope === 'draft'">
           <input class="file" type="file" @change="onFile" accept=".md,.txt" />
           <button class="btn" :disabled="!file || loading" @click="extract">上传并抽取</button>
-          <button class="btn" :disabled="!draftId || loading" @click="commitDraft">确认入正式图谱</button>
+          <button class="btn" :disabled="!draftId || loading" @click="commitDraft">确认入正式本体库</button>
         </template>
         <template v-else>
           <button class="btn secondary" :disabled="loading" @click="refresh">刷新正式库</button>
@@ -42,8 +42,8 @@
             <button class="btn secondary" :disabled="!cy" @click="relayout">重新布局</button>
             <button class="btn secondary" :disabled="!cy" @click="fit">适配视图</button>
             <template v-if="scope === 'draft'">
-              <button class="btn secondary" :disabled="loading || !draftId" @click="refresh">刷新图谱</button>
-              <button class="btn secondary" :disabled="loading || !draftId" @click="cancelDraft">清空图谱</button>
+              <button class="btn secondary" :disabled="loading || !draftId" @click="refresh">刷新本体库</button>
+              <button class="btn secondary" :disabled="loading || !draftId" @click="cancelDraft">清空本体库</button>
               <button class="btn secondary" :disabled="loading" @click="initBehaviorModel">初始化行为模型</button>
             </template>
             <div class="legend" title="颜色图例">
@@ -438,7 +438,7 @@ function resetStreamPanel() {
     // ignore
   }
   streamGraph.value = { nameToId: new Map(), edgeSig: new Set(), layoutTimer: null };
-  // 清空图谱画布
+  // 清空本体库画布
   if (cy.value) {
     cy.value.elements().remove();
   }
@@ -895,7 +895,7 @@ function appendStreamObjects(sectionKey, items) {
     added++;
     console.log(`[appendStreamObjects] ${sectionKey}: added item to edit list`, newItem.__id, newItem.__obj);
     
-    // 实时添加到右侧列表：当检测到完整的对象时，立即显示到图谱画布右边的对象列表中
+    // 实时添加到右侧列表：当检测到完整的对象时，立即显示到本体库画布右边的对象列表中
     // 处理 entities、behaviors、rules、state_transitions 等节点类型
     if ((sectionKey === "entities" || sectionKey === "behaviors" || sectionKey === "rules" || sectionKey === "state_transitions") && it.obj) {
       // 使用与 newItem 相同的 id 生成逻辑
@@ -1227,6 +1227,10 @@ async function applyStreamEditsToDraft() {
 const entities = ref([]);
 const relations = ref([]);
 const stateTransitions = ref([]); // 对应提示词里的 state_transitions（状态）
+const serverStats = ref(null); // 来自后端 COUNT 的统计（解决 relations limit=2000 导致的统计错误）
+
+// 边的“流动”动画（虚线偏移）
+const edgeFlow = ref({ raf: 0, offset: 0, lastTs: 0 });
 const streamGraph = ref({
   nameToId: new Map(), // name -> nodeId
   edgeSig: new Set(), // `${type}::${srcId}::${dstId}`
@@ -1346,81 +1350,203 @@ function buildCy(nodes, edges) {
         props: n.props || {},
       },
     })),
-    ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type, props: e.props || {} } })),
+    ...edges.map((e) => ({ data: { id: e.id, source: e.src, target: e.dst, type: e.type, props: e.props || {} }, classes: "flow" })),
   ];
   const styleDef = [
     {
       selector: "node",
       style: {
-        "background-color": "#6366f1",
+        // 科技感（玻璃态）：更透明的暗底 + 冷色微光
+        "background-color": "rgba(2,6,23,0.12)",
+        "background-opacity": 1,
         // 始终用 displayName（name 为空时兜底为 id）
         label: "data(displayName)",
         color: "#e2e8f0",
         "text-outline-color": "#0b1220",
-        "text-outline-width": 3,
-        "font-size": 12,
+        "text-outline-width": 1,
+        "font-size": 12.5,
         "text-valign": "center",
         "text-halign": "center",
-        width: 42,
-        height: 42,
+        // HUD 风格文字底板：更轻更透明
+        "text-background-color": "rgba(2,6,23,0.25)",
+        "text-background-opacity": 1,
+        "text-background-padding": 3,
+        width: 52,
+        height: 52,
+        // 默认（对象）边框：对应图例里的“对象”
         "border-width": 1,
-        "border-color": "rgba(148,163,184,0.35)",
+        "border-color": "rgba(99,102,241,0.55)",
+        "border-opacity": 1,
+        // 弱化阴影与外圈，保留轻微科技感
+        "shadow-blur": 16,
+        "shadow-opacity": 0.45,
+        "shadow-color": "rgba(99,102,241,0.22)",
+        "shadow-offset-x": 0,
+        "shadow-offset-y": 0,
+        // 不使用 underlay 外圈（减少“边框区域”）
+        "underlay-opacity": 0,
       },
     },
     {
       selector: 'node[label = "Rule"]',
-      style: { "background-color": "#f59e0b" },
+      style: {
+        shape: "diamond",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(245,158,11,0.62)",
+        "shadow-color": "rgba(245,158,11,0.22)",
+      },
     },
     {
       selector: 'node[label = "规则"]',
-      style: { "background-color": "#f59e0b" },
+      style: {
+        shape: "diamond",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(245,158,11,0.62)",
+        "shadow-color": "rgba(245,158,11,0.22)",
+      },
     },
     {
       selector: 'node[label = "Behavior"]',
-      style: { "background-color": "#22c55e" },
+      style: {
+        shape: "hexagon",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(34,197,94,0.62)",
+        "shadow-color": "rgba(34,197,94,0.22)",
+      },
     },
     {
       selector: 'node[label = "行为"]',
-      style: { "background-color": "#22c55e" },
+      style: {
+        shape: "hexagon",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(34,197,94,0.62)",
+        "shadow-color": "rgba(34,197,94,0.22)",
+      },
     },
     {
       selector: 'node[label = "State"]',
-      style: { "background-color": "#38bdf8" },
+      style: {
+        shape: "round-rectangle",
+        width: 56,
+        height: 38,
+        // 仅用形状/尺寸区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(56,189,248,0.62)",
+        "shadow-color": "rgba(56,189,248,0.22)",
+      },
     },
     {
       selector: 'node[label = "RiskState"]',
-      style: { "background-color": "#38bdf8" },
+      style: {
+        shape: "round-rectangle",
+        width: 56,
+        height: 38,
+        // 仅用形状/尺寸区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(56,189,248,0.62)",
+        "shadow-color": "rgba(56,189,248,0.22)",
+      },
     },
     {
       selector: 'node[label = "状态"]',
-      style: { "background-color": "#38bdf8" },
+      style: {
+        shape: "round-rectangle",
+        width: 56,
+        height: 38,
+        // 仅用形状/尺寸区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(56,189,248,0.62)",
+        "shadow-color": "rgba(56,189,248,0.22)",
+      },
     },
     {
       selector: 'node[label = "Evidence"], node[label = "Artifact"]',
-      style: { "background-color": "#a855f7" },
+      style: {
+        shape: "ellipse",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(168,85,247,0.62)",
+        "shadow-color": "rgba(168,85,247,0.22)",
+      },
     },
     {
       selector: 'node[label = "证据"], node[label = "产物"]',
-      style: { "background-color": "#a855f7" },
+      style: {
+        shape: "ellipse",
+        // 仅用形状区分，避免不同类型出现不同填充/边框
+        "border-color": "rgba(168,85,247,0.62)",
+        "shadow-color": "rgba(168,85,247,0.22)",
+      },
     },
     {
       selector: "edge",
       style: {
-        width: 2,
-        "line-color": "rgba(148,163,184,0.65)",
-        "target-arrow-color": "rgba(148,163,184,0.75)",
+        // 更细、更轻的智能科技感连线
+        width: 1.35,
+        "line-color": "rgba(148,163,184,0.30)",
+        "target-arrow-color": "rgba(148,163,184,0.45)",
         "target-arrow-shape": "triangle",
+        "arrow-scale": 0.9,
         "curve-style": "bezier",
         label: "data(type)",
         "font-size": 10,
         color: "#e2e8f0",
         "text-outline-color": "#0b1220",
-        "text-outline-width": 3,
+        "text-outline-width": 1,
+        "text-background-color": "rgba(2,6,23,0.25)",
+        "text-background-opacity": 1,
+        "text-background-padding": 2,
+      },
+    },
+    // 动态流动效果：虚线偏移（由 requestAnimationFrame 驱动）
+    {
+      selector: "edge.flow",
+      style: {
+        "line-style": "dashed",
+        "line-dash-pattern": [8, 6],
+        "line-cap": "round",
+        "line-color": "rgba(56,189,248,0.32)",
+        "target-arrow-color": "rgba(56,189,248,0.40)",
       },
     },
     { selector: ".selected", style: { "border-width": 3, "border-color": "#22c55e" } },
-    { selector: "edge.selected", style: { "line-color": "#22c55e", "target-arrow-color": "#22c55e", width: 3 } },
+    {
+      selector: "node.selected",
+      style: {
+        "border-width": 3,
+        "border-color": "rgba(56,189,248,0.95)",
+        "shadow-color": "rgba(56,189,248,0.55)",
+        "shadow-opacity": 0.55,
+        "shadow-blur": 18,
+      },
+    },
+    { selector: "edge.selected", style: { "line-color": "rgba(56,189,248,0.95)", "target-arrow-color": "rgba(56,189,248,0.95)", width: 2.2, "arrow-scale": 1.05 } },
   ];
+
+  function startEdgeFlow() {
+    if (!cy.value) return;
+    if (edgeFlow.value.raf) return;
+    edgeFlow.value.offset = 0;
+    edgeFlow.value.lastTs = 0;
+    const step = (ts) => {
+      if (unmounting.value || !cy.value) return;
+      // 30fps 左右即可，避免性能压力
+      if (!edgeFlow.value.lastTs || ts - edgeFlow.value.lastTs >= 33) {
+        edgeFlow.value.lastTs = ts;
+        edgeFlow.value.offset = (edgeFlow.value.offset - 2) % 10000;
+        try {
+          cy.value.style().selector("edge.flow").style("line-dash-offset", edgeFlow.value.offset).update();
+        } catch {
+          // 若某些版本不支持 line-dash-offset，则直接停止动画，不影响基础渲染
+          try {
+            cancelAnimationFrame(edgeFlow.value.raf);
+          } catch {
+            // ignore
+          }
+          edgeFlow.value.raf = 0;
+          return;
+        }
+      }
+      edgeFlow.value.raf = requestAnimationFrame(step);
+    };
+    edgeFlow.value.raf = requestAnimationFrame(step);
+  }
 
   if (!cy.value) {
     cy.value = cytoscape({
@@ -1429,6 +1555,7 @@ function buildCy(nodes, edges) {
       style: styleDef,
       layout: { name: "fcose", quality: "default", animate: true },
     });
+    startEdgeFlow();
 
     cy.value.on("tap", "node", (evt) => {
       const id = evt.target.id();
@@ -1471,6 +1598,7 @@ function buildCy(nodes, edges) {
       n.data("displayName", nm || n.id());
     });
     relayout();
+    startEdgeFlow();
   }
   highlightSelected();
 }
@@ -1536,25 +1664,30 @@ async function refresh() {
       if (!props.draftId) {
         entities.value = [];
         relations.value = [];
+        serverStats.value = null;
         buildCy([], []);
         return;
       }
-      const [en, re] = await Promise.all([
+      const [en, re, st] = await Promise.all([
         fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/entities`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
         fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/relations`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
+        fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/stats`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       ]);
       entities.value = en;
       relations.value = re;
+      serverStats.value = st;
       await runQuery();
       return;
     }
 
-    const [en, re] = await Promise.all([
+    const [en, re, st] = await Promise.all([
       fetch(`${props.apiBase}/ontology/entities`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
       fetch(`${props.apiBase}/ontology/relations`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
+      fetch(`${props.apiBase}/ontology/stats`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     entities.value = en;
     relations.value = re;
+    serverStats.value = st;
     await runQuery();
   } catch (e) {
     toastError(`刷新失败: ${e}`);
@@ -1693,7 +1826,7 @@ async function extract() {
           streamPanel.value.hasEverOpened = true;
           streamPanel.value.draftId = payload.draft_id || "";
           // 关键：把 draftId 回传给父组件（Draft.vue 存 sessionStorage + 传回 props.draftId）
-          // 否则“刷新草稿/图查询/确认入正式图谱”会因为 props.draftId 为空而把画布清空
+          // 否则“刷新临时本体库/查询/确认入正式本体库”会因为 props.draftId 为空而把画布清空
           if (props.scope === "draft" && streamPanel.value.draftId && streamPanel.value.draftId !== props.draftId) {
             emit("draft-created", streamPanel.value.draftId);
           }
@@ -1709,7 +1842,7 @@ async function extract() {
           if (payload.nodes && Array.isArray(payload.nodes) && payload.edges && Array.isArray(payload.edges)) {
             buildCy(payload.nodes, payload.edges);
           }
-          toastSuccess("抽取完成：请在下方编辑后点击「确认入正式图谱（草稿图谱）」。");
+          toastSuccess("抽取完成：请在下方编辑后点击「确认入正式本体库（临时本体库）」。");
         } else if (ev === "error") {
           throw new Error(payload.message || JSON.stringify(payload));
         }
@@ -1807,18 +1940,20 @@ const createBtnText = computed(() => {
 });
 
 const stats = computed(() => {
-  const totalNodes = entities.value.length;
-  // 关系：只统计 relations（不要把 state_transitions 混入关系）
-  const relationsCount = relations.value.length;
-  const behaviors = entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
-  const rules = entities.value.filter((n) => normLabel(n.label) === "Rule").length;
-  // 状态：以状态节点为主（State/RiskState）。迁移表可在“状态”tab 下单独看。
-  const stateNodes = entities.value.filter((n) => {
-    const l = normLabel(n.label);
-    return l === "State" || l === "RiskState";
-  }).length;
-  const states = stateNodes;
-  const objects = Math.max(0, totalNodes - behaviors - rules - stateNodes);
+  // 优先使用服务端 COUNT（尤其是正式本体库 relations 默认 list 上限=2000）
+  const totalNodes = typeof serverStats.value?.totalNodes === "number" ? serverStats.value.totalNodes : entities.value.length;
+  const relationsCount = typeof serverStats.value?.relations === "number" ? serverStats.value.relations : relations.value.length;
+  const behaviors =
+    typeof serverStats.value?.behaviors === "number" ? serverStats.value.behaviors : entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
+  const rules = typeof serverStats.value?.rules === "number" ? serverStats.value.rules : entities.value.filter((n) => normLabel(n.label) === "Rule").length;
+  const states =
+    typeof serverStats.value?.states === "number"
+      ? serverStats.value.states
+      : entities.value.filter((n) => {
+          const l = normLabel(n.label);
+          return l === "State" || l === "RiskState";
+        }).length;
+  const objects = typeof serverStats.value?.objects === "number" ? serverStats.value.objects : Math.max(0, totalNodes - behaviors - rules - states);
   return { totalNodes, relations: relationsCount, behaviors, rules, states, objects };
 });
 
@@ -1977,6 +2112,14 @@ onBeforeUnmount(() => {
     // ignore
   }
   cy.value = null;
+
+  // 停止边流动动画
+  try {
+    if (edgeFlow.value.raf) cancelAnimationFrame(edgeFlow.value.raf);
+  } catch {
+    // ignore
+  }
+  edgeFlow.value.raf = 0;
 });
 
 watch(
@@ -2057,9 +2200,9 @@ function confirmDanger(action) {
   const map = {
     deleteNode: { title: "删除对象", message: "确认删除该对象？相关关系也会被删除。", action: deleteNode },
     deleteEdge: { title: "删除关系", message: "确认删除该关系？", action: deleteEdge },
-    cancelDraft: { title: "清空图谱", message: "确认清空当前草稿图谱？将删除临时图谱数据，且不可恢复。", action: cancelDraftDo },
-    commitDraft: { title: "确认入正式图谱", message: "确认将草稿写入正式图谱吗？写入后草稿将被清理。", action: commitDraftDo },
-    purgeAll: { title: "清空图数据库", message: "危险：将清空【正式图谱 + 草稿图谱】的所有节点与关系，且不可恢复。", action: purgeAllDo },
+    cancelDraft: { title: "清空本体库", message: "确认清空当前临时本体库？将删除临时本体库数据，且不可恢复。", action: cancelDraftDo },
+    commitDraft: { title: "确认入正式本体库", message: "确认将临时本体库写入正式本体库吗？写入后临时本体库将被清理。", action: commitDraftDo },
+    purgeAll: { title: "清空本体数据库", message: "危险：将清空【正式本体库 + 临时本体库】的所有节点与关系，且不可恢复。", action: purgeAllDo },
   };
   const item = map[action];
   if (!item) return;
@@ -2078,8 +2221,8 @@ async function commitDraftDo() {
   const issues = validateBehaviorsMounted();
   if (issues.length) {
     openInfoModal(
-      "写入正式图谱校验未通过",
-      "以下行为未挂载任何对象（请为每个行为创建“作用于/适用对象”关系后再写入正式图谱）：\n- " + issues.join("\n- ")
+      "写入正式本体库校验未通过",
+      "以下行为未挂载任何对象（请为每个行为创建“作用于/适用对象”关系后再写入正式本体库）：\n- " + issues.join("\n- ")
     );
     return;
   }
@@ -2088,11 +2231,11 @@ async function commitDraftDo() {
     const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(props.draftId)}/commit`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    toastSuccess(`写入正式图谱成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
+    toastSuccess(`写入正式本体库成功：节点 ${data.created_nodes}，关系 ${data.created_edges}`);
     emit("committed");
     emit("draft-cleared");
   } catch (e) {
-    toastError(`写入正式图谱失败: ${e}`);
+    toastError(`写入正式本体库失败: ${e}`);
   } finally {
     loading.value = false;
   }

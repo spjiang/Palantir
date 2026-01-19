@@ -33,9 +33,37 @@ class AgentDecideRequest(BaseModel):
 
 
 class AgentDecideFromAlertRequest(BaseModel):
-    draft_id: str = Field(..., description="草稿图谱 draft_id（用于读取本体行为/规则并回写任务）")
+    draft_id: str = Field(..., description="临时本体库 draft_id（用于读取本体行为/规则并回写任务）")
     alarm_id: str = Field(..., description="L3 生成的预警/告警结论 ID（alm-xxx）")
     task_type: str = Field(default="巡检", description="任务类型：巡检/处置/复核（可由大模型覆盖）")
+
+def _default_action_plan(task_type: str, *, segment_name: str | None = None, alarm_type: str | None = None, severity: str | None = None) -> list[dict[str, Any]]:
+    """
+    最小可行的 Action/Function 契约（可扩展）：
+    - action_type: 动作类型（字符串枚举）
+    - params: 动作参数（JSON）
+    """
+    t = (task_type or "巡检").strip()
+    if t == "处置":
+        return [
+            {"action_type": "dispatch_team", "params": {"target": segment_name, "priority": severity or "medium"}},
+            {"action_type": "isolate_segment", "params": {"target": segment_name, "reason": alarm_type or "风险处置"}},
+            {"action_type": "collect_evidence", "params": {"types": ["现场照片", "定位信息", "处置记录"]}},
+            {"action_type": "close_task", "params": {"rule": "evidence_required"}},
+        ]
+    if t == "复核":
+        return [
+            {"action_type": "query_latest_readings", "params": {"target": segment_name}},
+            {"action_type": "collect_evidence", "params": {"types": ["报告", "现场照片"]}},
+            {"action_type": "close_task", "params": {"rule": "review_required"}},
+        ]
+    # 默认：巡检
+    return [
+        {"action_type": "dispatch_team", "params": {"target": segment_name, "priority": severity or "low"}},
+        {"action_type": "inspect_segment", "params": {"target": segment_name, "focus": alarm_type or "常规巡检"}},
+        {"action_type": "collect_evidence", "params": {"types": ["现场照片"]}},
+        {"action_type": "close_task", "params": {"rule": "evidence_required"}},
+    ]
 
 
 def _llm_decide_task(*, alarm: dict[str, Any], behaviors: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -52,7 +80,7 @@ def _llm_decide_task(*, alarm: dict[str, Any], behaviors: list[dict[str, Any]]) 
             "content": (
                 "你是油气管网运维的智能体决策模块（L4）。\n"
                 "给定一条预警（告警结论）与候选行为列表，请选择最合适的行为并生成一个运维任务。\n"
-                "只输出严格 JSON：{ \"task_type\": \"巡检|处置|复核\", \"title\": \"...\", \"reason\": \"...\", \"chosen_behavior\": \"...\" }\n\n"
+                "只输出严格 JSON：{ \"task_type\": \"巡检|处置|复核\", \"title\": \"...\", \"reason\": \"...\", \"chosen_behavior\": \"...\", \"action_plan\": [ {\"action_type\":\"...\",\"params\":{}} ] }\n\n"
                 f"预警（alarm）：{alarm}\n\n"
                 f"候选行为（behaviors）：{behaviors}\n"
             ),
@@ -84,7 +112,7 @@ def _llm_decide_task_from_risk(*, risk: dict[str, Any], segment: dict[str, Any],
             "content": (
                 "你是油气管网运维的智能体决策模块（L4）。\n"
                 "给定一条风险事件（L3 输出）与候选行为列表，请选择最合适的行为并生成一个运维任务。\n"
-                "只输出严格 JSON：{ \"task_type\": \"巡检|处置|复核\", \"title\": \"...\", \"reason\": \"...\", \"chosen_behavior\": \"...\" }\n"
+                "只输出严格 JSON：{ \"task_type\": \"巡检|处置|复核\", \"title\": \"...\", \"reason\": \"...\", \"chosen_behavior\": \"...\", \"action_plan\": [ {\"action_type\":\"...\",\"params\":{}} ] }\n"
                 f"默认 task_type 建议：{default_task_type}\n\n"
                 f"管段（segment）：{segment}\n\n"
                 f"风险事件（risk_event）：{risk}\n\n"
@@ -117,9 +145,9 @@ def _llm_decide_task_from_risk(*, risk: dict[str, Any], segment: dict[str, Any],
 def decide(payload: AgentDecideRequest):
     """
     一个“可跑通闭环”的确定性智能体：
-    - 输入：L2 草稿本体（draft_id）+ L1 管段（segment_id）
-    - 读取：最新 risk_events（来自 L3），以及草稿图谱里的 behaviors/rules（用于解释与命名）
-    - 输出：创建 L5 任务（写入 Postgres tasks），并回写到草稿图谱（MaintenanceTask + targets）
+    - 输入：L2 临时本体库（draft_id）+ L1 管段（segment_id）
+    - 读取：最新 risk_events（来自 L3），以及临时本体库里的 behaviors/rules（用于解释与命名）
+    - 输出：创建 L5 任务（写入 Postgres tasks），并回写到临时本体库（MaintenanceTask + targets）
     """
     _require_pg()
 
@@ -162,6 +190,11 @@ def decide(payload: AgentDecideRequest):
         title = llm.get("title") or title
         reason = llm.get("reason")
         beh_name = llm.get("chosen_behavior") or beh_name
+    action_plan = None
+    if llm and isinstance(llm.get("action_plan"), list):
+        action_plan = llm.get("action_plan")
+    if action_plan is None:
+        action_plan = _default_action_plan(task_type, segment_name=seg.get("name"))
     if beh_name:
         title = f"{title} · 来源行为：{beh_name}"
 
@@ -173,9 +206,11 @@ def decide(payload: AgentDecideRequest):
         target_entity_id=_segment_node_id(payload.segment_id),
         target_entity_name=seg["name"],
         source_behavior=beh_name,
+        action_plan=action_plan,
+        decision_reason=reason,
     )
 
-    # 回写到 L2 草稿图谱：任务节点 + targets 关系（让 L2 图谱能看到“任务闭环”）
+    # 回写到 L2 临时本体库：任务节点 + targets 关系（让 L2 本体库能看到“任务闭环”）
     try:
         store.upsert_draft_entity_by_id(
             payload.draft_id,
@@ -190,7 +225,8 @@ def decide(payload: AgentDecideRequest):
                 "risk_score": score,
                 "risk_event_id": risk.get("id"),
                 "source_behavior": beh_name,
-                "llm_reason": reason,
+                "decision_reason": reason,
+                "action_plan": action_plan,
             },
         )
         rel_id = f"rel-l4-targets-{task['id']}"
@@ -211,10 +247,10 @@ def decide(payload: AgentDecideRequest):
 @router.post("/agent/decide_from_alert")
 def decide_from_alert(payload: AgentDecideFromAlertRequest):
     """
-    从“预警/告警结论（L3 输出）”触发 L4 决策，生成任务并回写草稿图谱。
+    从“预警/告警结论（L3 输出）”触发 L4 决策，生成任务并回写临时本体库。
     - 输入：draft_id + alarm_id
-    - 图谱查询：根据 alarm.raw.rule_id 找到关联 Rule，再通过 “约束” 找到 Behavior 候选
-    - 输出：创建 L5 任务（Postgres），并回写草稿图谱 targets
+    - 本体库查询：根据 alarm.raw.rule_id 找到关联 Rule，再通过 “约束” 找到 Behavior 候选
+    - 输出：创建 L5 任务（Postgres），并回写临时本体库 targets
     """
     _require_pg()
     alarm = pg.fetchone("SELECT * FROM alarms WHERE id=%s;", (payload.alarm_id,))
@@ -253,6 +289,16 @@ def decide_from_alert(payload: AgentDecideFromAlertRequest):
         title = llm.get("title") or title
         reason = llm.get("reason")
         chosen_behavior = llm.get("chosen_behavior")
+    action_plan = None
+    if llm and isinstance(llm.get("action_plan"), list):
+        action_plan = llm.get("action_plan")
+    if action_plan is None:
+        action_plan = _default_action_plan(
+            task_type,
+            segment_name=seg_name,
+            alarm_type=str(alarm.get("alarm_type") or ""),
+            severity=str(alarm.get("severity") or ""),
+        )
     else:
         # 兜底：优先取候选中的第一个
         chosen_behavior = candidates[0]["name"] if candidates else None
@@ -265,9 +311,11 @@ def decide_from_alert(payload: AgentDecideFromAlertRequest):
         target_entity_id=_segment_node_id(seg_id),
         target_entity_name=seg_name,
         source_behavior=chosen_behavior,
+        action_plan=action_plan,
+        decision_reason=reason,
     )
 
-    # 回写草稿图谱：任务节点 + targets
+    # 回写临时本体库：任务节点 + targets
     try:
         # 确保“目标管段实例”节点存在（避免仅通过 L3 回写时才有）
         store.upsert_draft_entity_by_id(
@@ -307,6 +355,8 @@ def decide_from_alert(payload: AgentDecideFromAlertRequest):
                 "rule_id": rule_id,
                 "source_behavior": chosen_behavior,
                 "reason": reason,
+                "decision_reason": reason,
+                "action_plan": action_plan,
             },
         )
         store.upsert_draft_relation_by_id(

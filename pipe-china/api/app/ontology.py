@@ -19,7 +19,7 @@ class OntologyStore:
     - 实体节点：(:Concept {id, name, label, props_json})
     - 关系边：  (src)-[:REL {id, type, props_json}]->(dst)
 
-    草稿（临时图谱，按 draft_id 隔离）：
+    临时本体库（按 draft_id 隔离）：
     - 实体节点：(:DraftConcept {draft_id, id, name, label, props_json})
     - 关系边：  (src)-[:DREL {draft_id, id, type, props_json}]->(dst)
     """
@@ -104,7 +104,7 @@ class OntologyStore:
     # --------------------
 
     def save_draft(self, draft_id: str, nodes: list[Entity], edges: list[Relation]) -> None:
-        """把抽取结果写入“临时图谱”（隔离于正式图谱）。"""
+        """把抽取结果写入“临时本体库”（隔离于正式本体库）。"""
         for n in nodes:
             self.upsert_draft_entity_by_id(draft_id, n.id, n.name, n.label or "Concept", n.props or {})
         for e in edges:
@@ -226,7 +226,7 @@ class OntologyStore:
 
     def purge_all(self) -> None:
         """
-        危险操作：清空整个图数据库（包含正式图谱 Concept/REL 与临时图谱 DraftConcept/DREL）。
+        危险操作：清空整个本体数据库（包含正式本体库 Concept/REL 与临时本体库 DraftConcept/DREL）。
         """
         query = "MATCH (n) DETACH DELETE n"
         with self.driver.session() as session:
@@ -276,13 +276,22 @@ class OntologyStore:
         return list(nodes.values()), list(edges.values())
 
     def commit_draft_id(self, draft_id: str, *, delete_after: bool = True) -> tuple[int, int]:
-        """把临时图谱复制到正式图谱（幂等按 id upsert）。"""
+        """把临时本体库复制到正式本体库（幂等按 id upsert）。"""
         nodes = self.list_draft_entities(draft_id, limit=5000)
         edges = self.list_draft_relations(draft_id, limit=20000)
         created_nodes, created_edges = self.commit_draft(nodes, edges)
         if delete_after:
             self.delete_draft(draft_id)
         return created_nodes, created_edges
+
+    def purge_formal(self) -> None:
+        """
+        清空正式本体库（仅删除 :Concept 与 :REL）。
+        用于“发布=替换”与“回滚=恢复快照”的最小实现。
+        """
+        query = "MATCH (n:Concept) DETACH DELETE n"
+        with self.driver.session() as session:
+            session.run(query).consume()
 
     def list_entities(self, limit: int = 500) -> list[Entity]:
         query = """
@@ -326,6 +335,58 @@ class OntologyStore:
                     )
                 )
             return items
+
+    def formal_stats(self) -> dict:
+        """
+        统计正式本体库的数量（用于前端展示，不受 list_relations limit=2000 影响）。
+        注意：实体类型来自节点属性 n.label，而不是 Neo4j label。
+        """
+        q_nodes = """
+        MATCH (n:Concept)
+        RETURN
+          count(n) AS totalNodes,
+          sum(CASE WHEN n.label = 'Behavior' THEN 1 ELSE 0 END) AS behaviors,
+          sum(CASE WHEN n.label = 'Rule' THEN 1 ELSE 0 END) AS rules,
+          sum(CASE WHEN n.label IN ['State','RiskState'] THEN 1 ELSE 0 END) AS states
+        """
+        q_rels = "MATCH ()-[r:REL]->() RETURN count(r) AS relations"
+        with self.driver.session() as session:
+            a = session.run(q_nodes).single()
+            b = session.run(q_rels).single()
+        total = int(a["totalNodes"] or 0) if a else 0
+        behaviors = int(a["behaviors"] or 0) if a else 0
+        rules = int(a["rules"] or 0) if a else 0
+        states = int(a["states"] or 0) if a else 0
+        relations = int(b["relations"] or 0) if b else 0
+        objects = max(0, total - behaviors - rules - states)
+        return {"totalNodes": total, "relations": relations, "behaviors": behaviors, "rules": rules, "states": states, "objects": objects}
+
+    def draft_stats(self, draft_id: str) -> dict:
+        """
+        统计临时本体库（draft_id 隔离）的数量。
+        """
+        q_nodes = """
+        MATCH (n:DraftConcept {draft_id:$draft_id})
+        RETURN
+          count(n) AS totalNodes,
+          sum(CASE WHEN n.label = 'Behavior' THEN 1 ELSE 0 END) AS behaviors,
+          sum(CASE WHEN n.label = 'Rule' THEN 1 ELSE 0 END) AS rules,
+          sum(CASE WHEN n.label IN ['State','RiskState'] THEN 1 ELSE 0 END) AS states
+        """
+        q_rels = """
+        MATCH (:DraftConcept {draft_id:$draft_id})-[r:DREL {draft_id:$draft_id}]->(:DraftConcept {draft_id:$draft_id})
+        RETURN count(r) AS relations
+        """
+        with self.driver.session() as session:
+            a = session.run(q_nodes, draft_id=draft_id).single()
+            b = session.run(q_rels, draft_id=draft_id).single()
+        total = int(a["totalNodes"] or 0) if a else 0
+        behaviors = int(a["behaviors"] or 0) if a else 0
+        rules = int(a["rules"] or 0) if a else 0
+        states = int(a["states"] or 0) if a else 0
+        relations = int(b["relations"] or 0) if b else 0
+        objects = max(0, total - behaviors - rules - states)
+        return {"totalNodes": total, "relations": relations, "behaviors": behaviors, "rules": rules, "states": states, "objects": objects}
 
     def update_entity(self, entity_id: str, name: str | None, label: str | None, props: dict | None) -> Entity:
         query = """
@@ -415,9 +476,9 @@ class OntologyStore:
 
     def query_graph(self, root_id: str | None, depth: int) -> Tuple[List[Entity], List[Relation]]:
         """
-        查询“正式图谱”：
+        查询“正式本体库”：
         - 仅返回 (:Concept)-[:REL]->(:Concept)
-        - 避免把草稿图谱 (:DraftConcept)-[:DREL]->(:DraftConcept) 混进来
+        - 避免把临时本体库 (:DraftConcept)-[:DREL]->(:DraftConcept) 混进来
         """
         # Neo4j 不允许在可变长度模式里使用参数（[*1..$depth] 会报错），
         # 因此这里把 depth（已在上层做过限制）作为字面量拼到 Cypher 中。

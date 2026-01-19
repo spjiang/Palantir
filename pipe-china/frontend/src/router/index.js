@@ -53,8 +53,8 @@ const routes = [
           layerTitle: "L2 本体/语义选型",
           sidebar: [
             { label: "概览", to: "/l2/overview" },
-            { label: "草稿图谱（抽取/编辑）", to: "/l2/draft" },
-            { label: "正式图谱（查询/维护）", to: "/l2/formal" },
+            { label: "临时本体库（抽取/编辑）", to: "/l2/draft" },
+            { label: "正式本体库（查询/维护）", to: "/l2/formal" },
           ],
         },
         children: [
