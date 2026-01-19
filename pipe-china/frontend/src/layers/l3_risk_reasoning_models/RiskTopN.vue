@@ -33,6 +33,12 @@
           <option value="deepseek">DeepSeek（大模型推理）</option>
           <option value="rule_engine">规则引擎（确定性兜底）</option>
         </select>
+        <label style="margin-top: 10px">L4 派单触发阈值（min_risk_state）</label>
+        <select v-model="minRiskState">
+          <option value="波动">波动</option>
+          <option value="异常">异常</option>
+          <option value="高风险">高风险</option>
+        </select>
         <div class="btnrow">
           <button class="btn" :disabled="loading || !segmentId" @click="evaluateOne">评估并回写</button>
           <button class="btn secondary" :disabled="loading || !segmentId" @click="agentDecide">L4 生成任务</button>
@@ -143,6 +149,12 @@
         <button class="btn secondary" :disabled="loading" @click="topnView = 'segments'">管段风险 TopN</button>
         <button class="btn secondary" :disabled="loading" @click="topnView = 'alerts'">预警 TopN（L3 产出）</button>
       </div>
+      <div class="row" style="margin-top: 10px; grid-template-columns: 1fr; gap: 8px">
+        <label class="muted" style="display:flex; align-items:center; gap:8px; margin:0">
+          <input type="checkbox" v-model="autoDispatch" />
+          点击行时自动派单到 L4（谨慎开启，建议先用按钮）
+        </label>
+      </div>
 
       <div v-if="topnView === 'alerts'" style="margin-top: 10px">
         <div class="muted">说明：这里展示的是 <b>L3 推理生成的告警结论</b>（raw.source=l3）。要看到数据，请先对管段执行一次“评估并回写”。</div>
@@ -169,7 +181,7 @@
               <td class="mono">{{ a.severity }}</td>
               <td>{{ a.message }}</td>
               <td>
-                <button class="btn mini secondary" :disabled="loading || !draftId" @click="pushAlertToL4(a.id)">推送到 L4</button>
+                <button class="btn mini secondary" :disabled="loading || !draftId" @click.stop="pushAlertToL4(a.id)">推送到 L4</button>
               </td>
               <td class="mono small">{{ a.id }}</td>
             </tr>
@@ -188,6 +200,7 @@
             <th>告警</th>
             <th>latest(p/f)</th>
             <th>latest 传感器(p/f)</th>
+            <th>操作</th>
             <th>解释</th>
           </tr>
         </thead>
@@ -205,6 +218,9 @@
             <td class="mono">{{ it.alarm_count }}</td>
             <td class="mono">{{ it.latest_pressure ?? "-" }} / {{ it.latest_flow ?? "-" }}</td>
             <td class="mono small">{{ it.latest_pressure_sensor_name || "-" }} / {{ it.latest_flow_sensor_name || "-" }}</td>
+            <td>
+              <button class="btn mini secondary" :disabled="loading || !draftId" @click.stop="dispatchFromSegment(it)">评估→派单(L4)</button>
+            </td>
             <td>{{ it.explain }}</td>
           </tr>
         </tbody>
@@ -229,16 +245,24 @@ const evaluateResp = ref(null);
 const topnReasoningMode = ref("deepseek");
 const evalReasoningMode = ref("deepseek");
 const topnView = ref("segments"); // segments | alerts
+const autoDispatch = ref(false);
+const minRiskState = ref("异常");
 function selectSegmentFromTopN(it) {
   segmentId.value = it.segment_id;
   // 选中管段后，自动切到“预警 TopN”并按该管段筛选，方便互相查看
   topnView.value = "alerts";
   fetchAlertTopN();
+  if (autoDispatch.value) {
+    dispatchFromSegment(it);
+  }
 }
 
 function selectSegmentFromAlert(a) {
   if (a?.segment_id) segmentId.value = a.segment_id;
   topnView.value = "segments";
+  if (autoDispatch.value && a?.id) {
+    pushAlertToL4(a.id);
+  }
 }
 const draftLoading = ref(false);
 const draftEntities = ref([]);
@@ -411,13 +435,52 @@ async function agentDecide() {
     const data = await api("/agent/decide", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft_id: draftId.value, segment_id: segmentId.value, min_risk_state: "异常", task_type: "巡检" }),
+      body: JSON.stringify({ draft_id: draftId.value, segment_id: segmentId.value, min_risk_state: minRiskState.value || "异常", task_type: "巡检" }),
     });
     evaluateResp.value = data;
     alert(data.created ? "任务已生成（可到 L5 查看）" : (data.reason || "未生成任务"));
   } catch (e) {
     console.error(e);
     alert(`L4 决策失败：${e.message}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function dispatchFromSegment(it) {
+  if (!draftId.value) {
+    alert("请先填写/读取 draftId（L4 需要在草稿图谱中写回任务 targets）。");
+    return;
+  }
+  const seg = it?.segment_id || segmentId.value;
+  if (!seg) return;
+  loading.value = true;
+  try {
+    // 1) 先评估并回写（生成 risk_event +（可能）L3 告警结论）
+    const ev = await api("/risk/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        draft_id: draftId.value || null,
+        segment_id: seg,
+        write_back_to_draft: true,
+        reasoning_mode: evalReasoningMode.value || "deepseek",
+      }),
+    });
+    evaluateResp.value = ev;
+    // 2) 再触发 L4 派单（基于最新 risk_event）
+    const data = await api("/agent/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft_id: draftId.value, segment_id: seg, min_risk_state: minRiskState.value || "异常", task_type: "巡检" }),
+    });
+    alert(data.created ? "已评估并派单：任务已生成（去 L5 查看）" : (data.reason || "已评估，但未生成任务（可能未达到阈值）"));
+    // 刷新两种 TopN，方便立刻看到“预警 TopN”
+    await fetchTopN();
+    await fetchAlertTopN();
+  } catch (e) {
+    console.error(e);
+    alert(`评估/派单失败：${e.message}`);
   } finally {
     loading.value = false;
   }
