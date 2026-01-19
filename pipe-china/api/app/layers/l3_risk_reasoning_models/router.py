@@ -357,7 +357,7 @@ def risk_topn(
     draft_id: str | None = None,
     limit: int = 10,
     include_empty: bool = False,
-    reasoning_mode: str = "rule_engine",
+    reasoning_mode: str = "deepseek",
 ):
     """
     TopN 风险：按 L1 感知数据（读数/原始告警）+（可选）L2 结构化规则 对管段评分。
@@ -381,11 +381,15 @@ def risk_topn(
 
         latest_pressure = None
         latest_flow = None
+        latest_pressure_sensor_name = None
+        latest_flow_sensor_name = None
         for r in readings:
             if latest_pressure is None and r.get("pressure") is not None:
                 latest_pressure = _safe_float(r.get("pressure"))
+                latest_pressure_sensor_name = r.get("sensor_name") or None
             if latest_flow is None and r.get("flow") is not None:
                 latest_flow = _safe_float(r.get("flow"))
+                latest_flow_sensor_name = r.get("sensor_name") or None
         base = 0.0
         # alarms 启发：high=0.25, medium=0.15, low=0.08
         for a in alarms[:10]:
@@ -394,7 +398,7 @@ def risk_topn(
         base = min(0.8, base)
 
         rules = _extract_structured_rules_from_draft(draft_id, class_name=(seg.get("ontology_class") or "管段")) if draft_id else []
-        # 先用“规则引擎”做一个便宜的预排序分数（用于 deepseek 时限制调用次数）
+        # 先用“规则引擎”做一个便宜的预排序分数（用于 deepseek 预排序；最终返回是否用 deepseek 由 mode 决定）
         rule_score, reasons = _apply_rules(rules, {"pressure": latest_pressure, "flow": latest_flow})
         pre_score = min(1.0, base + rule_score)
         pre_state = _risk_state_from_score(pre_score)
@@ -410,6 +414,8 @@ def risk_topn(
                 "alarm_count": len(alarms),
                 "latest_pressure": latest_pressure,
                 "latest_flow": latest_flow,
+                "latest_pressure_sensor_name": latest_pressure_sensor_name,
+                "latest_flow_sensor_name": latest_flow_sensor_name,
                 "risk_score": round(pre_score, 3),
                 "risk_state": pre_state,
                 "explain": pre_explain,
@@ -418,9 +424,9 @@ def risk_topn(
         )
 
     items.sort(key=lambda x: x["risk_score"], reverse=True)
-    # deepseek：只对预排序 TopK 进行大模型推理，避免“全量管段逐个调用”带来成本与延迟
+    # deepseek：对“最终返回的每一条”强制走大模型推理（不再静默回退），确保用户选择可控/可解释
     if mode == "deepseek":
-        top_k = max(1, min(int(limit or 10), 10))
+        top_k = max(1, min(int(limit or 10), 20))
         for it in items[:top_k]:
             seg_id = it.get("segment_id")
             seg = next((s for s in segs if s.get("id") == seg_id), None)
@@ -433,7 +439,7 @@ def risk_topn(
                 rules=it.get("_draft_rules_used") or [],
             )
             if not llm:
-                continue
+                raise HTTPException(502, f"DeepSeek 推理失败：segment_id={seg_id}（可改用 reasoning_mode=rule_engine 兜底）")
             score = float(llm.get("risk_score") or it.get("risk_score") or 0.0)
             score = max(0.0, min(1.0, score))
             state = (llm.get("risk_state") or "").strip() or _risk_state_from_score(score)
@@ -442,11 +448,30 @@ def risk_topn(
             it["risk_score"] = round(score, 3)
             it["risk_state"] = state
             it["explain"] = (llm.get("explain") or "").strip() or "DeepSeek 推理"
+            it["reasoning_mode"] = "deepseek"
         items.sort(key=lambda x: x["risk_score"], reverse=True)
+    else:
+        for it in items:
+            it["reasoning_mode"] = "rule_engine"
     for it in items:
         if "_draft_rules_used" in it:
             del it["_draft_rules_used"]
     return {"items": items[: max(1, min(limit, 100))]}
+
+
+@router.get("/risk/alerts/topn")
+def alert_topn(segment_id: str | None = None, limit: int = 20):
+    """
+    预警 TopN（更贴近“TopN 就是预警列表”）：
+    - 直接返回 L3 推理产生的“告警结论”（PG alarms，raw.source=l3）
+    - 默认按 severity+时间排序（high>medium>low）
+    """
+    _require_pg()
+    limit = max(1, min(int(limit or 20), 200))
+    rows = pg.list_alarms_enriched(segment_id=segment_id, source="l3", limit=500)
+    sev_rank = {"high": 3, "medium": 2, "low": 1}
+    rows.sort(key=lambda a: (sev_rank.get(str(a.get("severity") or "").lower(), 0), a.get("ts") or ""), reverse=True)
+    return {"items": rows[:limit]}
 
 
 @router.post("/risk/evaluate")

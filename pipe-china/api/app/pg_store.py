@@ -381,6 +381,44 @@ class PostgresStore:
             )
         return self.fetchall("SELECT * FROM alarms ORDER BY ts DESC LIMIT %s;", (limit,))
 
+    def list_alarms_enriched(
+        self,
+        *,
+        segment_id: str | None = None,
+        source: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """
+        告警列表（带名称字段）：
+        - a.* + sensor_name + segment_name
+        - 可选过滤：segment_id、raw.source（例如 source=l3 代表 L3 推理生成的“告警结论”）
+        """
+        where = []
+        params: list[Any] = []
+        if segment_id:
+            where.append("a.segment_id=%s")
+            params.append(segment_id)
+        if source:
+            where.append("(a.raw->>'source')=%s")
+            params.append(str(source))
+        wh = ("WHERE " + " AND ".join(where)) if where else ""
+        params.append(limit)
+        return self.fetchall(
+            f"""
+            SELECT
+              a.*,
+              s.name AS sensor_name,
+              p.name AS segment_name
+            FROM alarms a
+            LEFT JOIN sensors s ON s.id=a.sensor_id
+            LEFT JOIN pipeline_segments p ON p.id=a.segment_id
+            {wh}
+            ORDER BY a.ts DESC
+            LIMIT %s;
+            """,
+            tuple(params),
+        )
+
     # -------- L3: 风险事件 --------
     def add_risk_event(
         self,

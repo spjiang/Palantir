@@ -139,8 +139,46 @@
 
     <div class="card subcard">
       <h3>TopN 列表</h3>
+      <div class="btnrow" style="margin-top: 8px">
+        <button class="btn secondary" :disabled="loading" @click="topnView = 'segments'">管段风险 TopN</button>
+        <button class="btn secondary" :disabled="loading" @click="topnView = 'alerts'">预警 TopN（L3 产出）</button>
+      </div>
+
+      <div v-if="topnView === 'alerts'" style="margin-top: 10px">
+        <div class="muted">说明：这里展示的是 <b>L3 推理生成的告警结论</b>（raw.source=l3）。要看到数据，请先对管段执行一次“评估并回写”。</div>
+        <div v-if="alertItems.length === 0" class="muted" style="margin-top: 10px">暂无预警（L3 还未生成告警结论）</div>
+        <table v-else class="tbl">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>管段</th>
+              <th>传感器</th>
+              <th>类型</th>
+              <th>级别</th>
+              <th>消息</th>
+              <th>操作</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in alertItems" :key="a.id" class="clickable" @click="selectSegmentFromAlert(a)">
+              <td class="mono small">{{ fmt(a.ts) }}</td>
+              <td>{{ a.segment_name || a.segment_id || "-" }}</td>
+              <td>{{ a.sensor_name || a.sensor_id || "-" }}</td>
+              <td>{{ a.alarm_type }}</td>
+              <td class="mono">{{ a.severity }}</td>
+              <td>{{ a.message }}</td>
+              <td>
+                <button class="btn mini secondary" :disabled="loading || !draftId" @click="pushAlertToL4(a.id)">推送到 L4</button>
+              </td>
+              <td class="mono small">{{ a.id }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div v-if="items.length === 0" class="muted">暂无数据（先去 L1 写入/模拟一些读数与告警）</div>
-      <table v-else class="tbl">
+      <table v-else-if="topnView === 'segments'" class="tbl">
         <thead>
           <tr>
             <th>管段</th>
@@ -149,17 +187,24 @@
             <th>传感器</th>
             <th>告警</th>
             <th>latest(p/f)</th>
+            <th>latest 传感器(p/f)</th>
             <th>解释</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="it in items" :key="it.segment_id" @click="segmentId = it.segment_id" class="clickable">
+          <tr
+            v-for="it in items"
+            :key="it.segment_id"
+            @click="selectSegmentFromTopN(it)"
+            class="clickable"
+          >
             <td>{{ it.segment_name }} <span class="mono small">({{ it.segment_id }})</span></td>
             <td class="mono">{{ it.risk_score }}</td>
             <td><span class="pill" :class="`st-${it.risk_state}`">{{ it.risk_state }}</span></td>
             <td class="mono">{{ it.sensor_count }}</td>
             <td class="mono">{{ it.alarm_count }}</td>
             <td class="mono">{{ it.latest_pressure ?? "-" }} / {{ it.latest_flow ?? "-" }}</td>
+            <td class="mono small">{{ it.latest_pressure_sensor_name || "-" }} / {{ it.latest_flow_sensor_name || "-" }}</td>
             <td>{{ it.explain }}</td>
           </tr>
         </tbody>
@@ -177,11 +222,24 @@ const props = defineProps({
 
 const loading = ref(false);
 const items = ref([]);
+const alertItems = ref([]);
 const draftId = ref("");
 const segmentId = ref("");
 const evaluateResp = ref(null);
-const topnReasoningMode = ref("rule_engine");
-const evalReasoningMode = ref("auto");
+const topnReasoningMode = ref("deepseek");
+const evalReasoningMode = ref("deepseek");
+const topnView = ref("segments"); // segments | alerts
+function selectSegmentFromTopN(it) {
+  segmentId.value = it.segment_id;
+  // 选中管段后，自动切到“预警 TopN”并按该管段筛选，方便互相查看
+  topnView.value = "alerts";
+  fetchAlertTopN();
+}
+
+function selectSegmentFromAlert(a) {
+  if (a?.segment_id) segmentId.value = a.segment_id;
+  topnView.value = "segments";
+}
 const draftLoading = ref(false);
 const draftEntities = ref([]);
 const draftRules = ref([]);
@@ -228,10 +286,36 @@ function api(path, init) {
 function loadDraftIdFromSession() {
   try {
     draftId.value = sessionStorage.getItem("pipe-china:draftId") || "";
+    topnReasoningMode.value = sessionStorage.getItem("pipe-china:l3TopnReasoningMode") || "deepseek";
+    evalReasoningMode.value = sessionStorage.getItem("pipe-china:l3EvalReasoningMode") || "deepseek";
   } catch {
     draftId.value = "";
+    topnReasoningMode.value = "deepseek";
+    evalReasoningMode.value = "deepseek";
   }
 }
+
+watch(
+  () => topnReasoningMode.value,
+  () => {
+    try {
+      sessionStorage.setItem("pipe-china:l3TopnReasoningMode", topnReasoningMode.value || "deepseek");
+    } catch {
+      // ignore
+    }
+  }
+);
+
+watch(
+  () => evalReasoningMode.value,
+  () => {
+    try {
+      sessionStorage.setItem("pipe-china:l3EvalReasoningMode", evalReasoningMode.value || "deepseek");
+    } catch {
+      // ignore
+    }
+  }
+);
 
 async function fetchTopN() {
   loading.value = true;
@@ -242,11 +326,28 @@ async function fetchTopN() {
     const q = qs.toString() ? `?${qs.toString()}` : "";
     const data = await api(`/risk/topn${q}`);
     items.value = data.items || [];
+    if (topnView.value === "alerts") {
+      await fetchAlertTopN();
+    }
   } catch (e) {
     console.error(e);
     alert(`获取 TopN 失败：${e.message}`);
   } finally {
     loading.value = false;
+  }
+}
+
+async function fetchAlertTopN() {
+  try {
+    const seg = (segmentId.value || "").trim();
+    const qs = new URLSearchParams();
+    qs.set("limit", "20");
+    if (seg) qs.set("segment_id", seg);
+    const data = await api(`/risk/alerts/topn?${qs.toString()}`);
+    alertItems.value = data.items || [];
+  } catch (e) {
+    console.error(e);
+    alert(`获取预警 TopN 失败：${e.message}`);
   }
 }
 
@@ -290,6 +391,8 @@ async function evaluateOne() {
     // 同步更新草稿模型展示（有时用户刚初始化）
     await fetchDraftModel();
     await fetchTopN();
+    // 评估后往往会生成 L3 告警结论，顺便刷新预警 TopN
+    await fetchAlertTopN();
   } catch (e) {
     console.error(e);
     alert(`评估失败：${e.message}`);
@@ -346,6 +449,7 @@ onMounted(() => {
   loadDraftIdFromSession();
   fetchTopN();
   fetchDraftModel();
+  fetchAlertTopN();
 });
 
 watch(
