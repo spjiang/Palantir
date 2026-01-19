@@ -44,6 +44,7 @@
             <template v-if="scope === 'draft'">
               <button class="btn secondary" :disabled="loading || !draftId" @click="refresh">刷新图谱</button>
               <button class="btn secondary" :disabled="loading || !draftId" @click="cancelDraft">清空图谱</button>
+              <button class="btn secondary" :disabled="loading" @click="initBehaviorModel">初始化行为模型</button>
             </template>
             <div class="legend" title="颜色图例">
               <span class="lg-item"><i class="dot behavior"></i>行为</span>
@@ -90,6 +91,34 @@
                 <div class="row-sub">{{ n.label }} · {{ n.id }}</div>
               </div>
             </template>
+            <template v-else-if="nodeTab === 'states'">
+              <div class="rowitem" style="opacity: 0.75; cursor: default">
+                <div class="row-title">状态节点（State / RiskState）</div>
+                <div class="row-sub">可编辑 props（用于 L3/L4 解释与驱动）</div>
+              </div>
+              <div
+                v-for="n in filteredStateNodes"
+                :key="n.id"
+                class="rowitem"
+                :class="{ selected: selected?.kind === 'node' && selected.id === n.id }"
+                @click="selectNodeById(n.id)"
+              >
+                <div class="row-title">{{ n.name }}</div>
+                <div class="row-sub">{{ n.label }} · {{ n.id }}</div>
+              </div>
+              <div v-if="filteredStateTransitions.length" class="rowitem" style="opacity: 0.75; cursor: default; margin-top: 8px">
+                <div class="row-title">状态迁移（state_transitions）</div>
+                <div class="row-sub">用于展示“对象 from → to via 行为”</div>
+              </div>
+              <div v-for="t in filteredStateTransitions" :key="t.id" class="rowitem">
+                <div class="row-title">{{ t.via || "状态迁移" }}</div>
+                <div class="row-sub">{{ t.from }} → {{ t.to }}（{{ t.object }}）</div>
+              </div>
+              <div v-if="!filteredStateNodes.length && !filteredStateTransitions.length" class="rowitem" style="opacity: 0.75; cursor: default">
+                <div class="row-title">暂无状态数据</div>
+                <div class="row-sub">可点击「初始化行为模型」或上传抽取后查看</div>
+              </div>
+            </template>
             <template v-else-if="nodeTab === 'relations'">
               <div
                 v-for="e in filteredRelations"
@@ -100,12 +129,6 @@
               >
                 <div class="row-title">{{ e.type }}</div>
                 <div class="row-sub">{{ (e.src_name || e.src) }} → {{ (e.dst_name || e.dst) }}</div>
-              </div>
-            </template>
-            <template v-else>
-              <div v-for="t in filteredStateTransitions" :key="t.id" class="rowitem">
-                <div class="row-title">{{ t.via || "状态迁移" }}</div>
-                <div class="row-sub">{{ t.from }} → {{ t.to }}（{{ t.object }}）</div>
               </div>
             </template>
           </div>
@@ -1260,9 +1283,19 @@ const filteredEntities = computed(() => {
     const label = normLabel(n.label);
     if (nodeTab.value === "behaviors") return label === "Behavior";
     if (nodeTab.value === "rules") return label === "Rule";
-    if (nodeTab.value === "states") return label === "State";
-    if (nodeTab.value === "objects") return !["Behavior", "Rule", "State"].includes(label);
+    if (nodeTab.value === "states") return label === "State" || label === "RiskState";
+    if (nodeTab.value === "objects") return !["Behavior", "Rule", "State", "RiskState"].includes(label);
     return true;
+  });
+  if (!k) return base;
+  return base.filter((n) => (n.name || "").includes(k) || (n.label || "").includes(k) || (n.id || "").includes(k));
+});
+
+const filteredStateNodes = computed(() => {
+  const k = kw.value.trim();
+  const base = entities.value.filter((n) => {
+    const label = normLabel(n.label);
+    return label === "State" || label === "RiskState";
   });
   if (!k) return base;
   return base.filter((n) => (n.name || "").includes(k) || (n.label || "").includes(k) || (n.id || "").includes(k));
@@ -1349,6 +1382,10 @@ function buildCy(nodes, edges) {
     },
     {
       selector: 'node[label = "State"]',
+      style: { "background-color": "#38bdf8" },
+    },
+    {
+      selector: 'node[label = "RiskState"]',
       style: { "background-color": "#38bdf8" },
     },
     {
@@ -1518,6 +1555,49 @@ async function refresh() {
     await runQuery();
   } catch (e) {
     toastError(`刷新失败: ${e}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function refreshDraftById(draftId) {
+  const [en, re] = await Promise.all([
+    fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/entities`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
+    fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/relations`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText)))),
+  ]);
+  entities.value = en;
+  relations.value = re;
+  // 直接按 draftId 进行图查询（避免 props.draftId 还没来得及更新）
+  const body = { root_id: query.value.root_id || null, depth: query.value.depth || 3 };
+  const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(draftId)}/graph`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const g = await res.json();
+  buildCy(g.nodes, g.edges);
+}
+
+async function initBehaviorModel() {
+  if (props.scope !== "draft") return;
+  loading.value = true;
+  try {
+    // 如果还没有 draftId，则先在前端生成一个（无需 DeepSeek 抽取也可以管理本体）
+    let did = props.draftId;
+    if (!did) {
+      did = `draft-manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      streamPanel.value.draftId = did;
+      emit("draft-created", did);
+    }
+    const res = await fetch(`${props.apiBase}/ontology/drafts/${encodeURIComponent(did)}/behavior_model/init`, { method: "POST" });
+    if (!res.ok) throw new Error(await res.text());
+    await res.json();
+    toastSuccess("已初始化行为模型（可执行规则已写入 Rule.props）");
+    nodeTab.value = "behaviors";
+    await refreshDraftById(did);
+  } catch (e) {
+    toastError(`初始化行为模型失败: ${e}`);
   } finally {
     loading.value = false;
   }
@@ -1712,10 +1792,12 @@ const stats = computed(() => {
   const relationsCount = relations.value.length;
   const behaviors = entities.value.filter((n) => normLabel(n.label) === "Behavior").length;
   const rules = entities.value.filter((n) => normLabel(n.label) === "Rule").length;
-  // 按提示词：state_transitions 就是“状态”数据
-  const states = stateTransitions.value.length;
-  // 仍然从节点中扣除 Behavior/Rule/State（如有）以计算“对象”数
-  const stateNodes = entities.value.filter((n) => normLabel(n.label) === "State").length;
+  // 状态：以状态节点为主（State/RiskState）。迁移表可在“状态”tab 下单独看。
+  const stateNodes = entities.value.filter((n) => {
+    const l = normLabel(n.label);
+    return l === "State" || l === "RiskState";
+  }).length;
+  const states = stateNodes;
   const objects = Math.max(0, totalNodes - behaviors - rules - stateNodes);
   return { totalNodes, relations: relationsCount, behaviors, rules, states, objects };
 });

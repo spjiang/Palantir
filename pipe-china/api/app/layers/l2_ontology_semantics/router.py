@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import traceback
 import uuid
@@ -256,6 +257,230 @@ def commit_draft(draft_id: str, delete_after: bool = True):
         )
     except Exception as e:
         raise HTTPException(500, f"commit draft failed: {e}")
+
+
+@router.post("/ontology/drafts/{draft_id}/behavior_model/init", response_model=dict)
+def init_behavior_model(draft_id: str):
+    """
+    初始化一套“可执行的行为建模模板”，用于让 L3/L4 直接读取本体建模数据跑通闭环：
+    - 核心对象：管段/传感器/告警/运维任务/证据
+    - 风险状态：正常/波动/异常/高风险
+    - 行为：异常识别/风险评估/处置决策/执行处置/复核与回归
+    - 规则：压力高阈值、流量低阈值（结构化字段 metric/op/threshold/weight）
+
+    说明：
+    - 该接口是“幂等 upsert”：重复调用会覆盖/补齐同 ID 的节点与关系，不会无限增长。
+    - 初始化的是“模板语义”，L1 的真实管段实例由 L3 在评估时写回草稿（ent-l1-seg-xxx）。
+    """
+
+    def hid(s: str) -> str:
+        return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
+
+    def eid(kind: str, name: str) -> str:
+        return f"ent-bm-{kind}-{hid(f'{kind}:{name}')}"
+
+    def rid(kind: str, src: str, typ: str, dst: str) -> str:
+        return f"rel-bm-{kind}-{hid(f'{src}|{typ}|{dst}')}"
+
+    # --- Objects ---
+    obj_seg = store.upsert_draft_entity_by_id(draft_id, eid("obj", "管段"), "管段", "PipelineSegment", {"source": "behavior_model"})
+    obj_sensor = store.upsert_draft_entity_by_id(draft_id, eid("obj", "传感器"), "传感器", "Sensor", {"source": "behavior_model"})
+    obj_alarm = store.upsert_draft_entity_by_id(draft_id, eid("obj", "告警"), "告警", "Alarm", {"source": "behavior_model"})
+    obj_task = store.upsert_draft_entity_by_id(draft_id, eid("obj", "运维任务"), "运维任务", "MaintenanceTask", {"source": "behavior_model"})
+    obj_ev = store.upsert_draft_entity_by_id(draft_id, eid("obj", "证据"), "证据", "Evidence", {"source": "behavior_model"})
+
+    # 模板对象之间也建立最小关系：管段 has_sensor 传感器（语义）
+    store.upsert_draft_relation_by_id(
+        draft_id,
+        rid("obj", obj_seg.id, "has_sensor", obj_sensor.id),
+        src=obj_seg.id,
+        dst=obj_sensor.id,
+        rel_type="has_sensor",
+        props={"source": "behavior_model"},
+    )
+
+    # --- Risk States ---
+    st_normal = store.upsert_draft_entity_by_id(draft_id, eid("state", "正常"), "正常", "RiskState", {"source": "behavior_model"})
+    st_fluct = store.upsert_draft_entity_by_id(draft_id, eid("state", "波动"), "波动", "RiskState", {"source": "behavior_model"})
+    st_abn = store.upsert_draft_entity_by_id(draft_id, eid("state", "异常"), "异常", "RiskState", {"source": "behavior_model"})
+    st_high = store.upsert_draft_entity_by_id(draft_id, eid("state", "高风险"), "高风险", "RiskState", {"source": "behavior_model"})
+
+    # --- Behaviors ---
+    beh_detect = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("beh", "异常识别（DetectAnomaly）"),
+        "异常识别（DetectAnomaly）",
+        "Behavior",
+        {
+            "source": "behavior_model",
+            "preconditions": ["出现压力/流量异常读数或告警"],
+            "inputs": ["sensor_readings", "alarms"],
+            "outputs": ["Alarm"],
+            "effects": ["将管段风险状态从正常/波动推进至异常"],
+        },
+    )
+    beh_assess = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("beh", "风险评估（AssessRisk）"),
+        "风险评估（AssessRisk）",
+        "Behavior",
+        {
+            "source": "behavior_model",
+            "preconditions": ["存在异常告警或异常识别输出"],
+            "inputs": ["alarms", "recent_readings"],
+            "outputs": ["risk_score", "RiskState"],
+            "effects": ["更新管段风险状态（异常/高风险）并给出解释"],
+        },
+    )
+    beh_decide = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("beh", "处置决策（DecideResponseAction）"),
+        "处置决策（DecideResponseAction）",
+        "Behavior",
+        {
+            "source": "behavior_model",
+            "preconditions": ["风险状态达到异常/高风险"],
+            "inputs": ["RiskState", "rules"],
+            "outputs": ["MaintenanceTask"],
+            "effects": ["生成巡检/处置/复核任务并绑定目标管段"],
+        },
+    )
+    beh_exec = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("beh", "执行处置（ExecuteMaintenance）"),
+        "执行处置（ExecuteMaintenance）",
+        "Behavior",
+        {
+            "source": "behavior_model",
+            "preconditions": ["存在待执行的运维任务"],
+            "inputs": ["MaintenanceTask"],
+            "outputs": ["Evidence"],
+            "effects": ["产出证据并回写任务状态"],
+        },
+    )
+    beh_verify = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("beh", "复核与回归（VerifyRecovery）"),
+        "复核与回归（VerifyRecovery）",
+        "Behavior",
+        {
+            "source": "behavior_model",
+            "preconditions": ["处置完成后获取新一轮读数/复测结果"],
+            "inputs": ["sensor_readings", "Evidence"],
+            "outputs": ["RiskState"],
+            "effects": ["风险状态回归正常或保持观察"],
+        },
+    )
+
+    def link_affects(beh_id: str, obj_id: str):
+        store.upsert_draft_relation_by_id(
+            draft_id,
+            rid("affects", beh_id, "作用于", obj_id),
+            src=beh_id,
+            dst=obj_id,
+            rel_type="作用于",
+            props={"source": "behavior_model"},
+        )
+
+    def link_produces(beh_id: str, obj_id: str):
+        store.upsert_draft_relation_by_id(
+            draft_id,
+            rid("produces", beh_id, "产生", obj_id),
+            src=beh_id,
+            dst=obj_id,
+            rel_type="产生",
+            props={"source": "behavior_model"},
+        )
+
+    def link_state(beh_id: str, rel_type: str, st_id: str):
+        store.upsert_draft_relation_by_id(
+            draft_id,
+            rid("state", beh_id, rel_type, st_id),
+            src=beh_id,
+            dst=st_id,
+            rel_type=rel_type,
+            props={"source": "behavior_model"},
+        )
+
+    # affects
+    for b in [beh_detect, beh_assess, beh_decide, beh_verify]:
+        link_affects(b.id, obj_seg.id)
+    link_affects(beh_detect.id, obj_sensor.id)
+    # produces
+    link_produces(beh_detect.id, obj_alarm.id)
+    link_produces(beh_decide.id, obj_task.id)
+    link_produces(beh_exec.id, obj_ev.id)
+    link_produces(beh_verify.id, obj_ev.id)
+    # state transitions (用 RiskState 承载)
+    link_state(beh_detect.id, "从状态", st_normal.id)
+    link_state(beh_detect.id, "到状态", st_abn.id)
+    link_state(beh_assess.id, "从状态", st_abn.id)
+    link_state(beh_assess.id, "到状态", st_high.id)
+    link_state(beh_verify.id, "从状态", st_high.id)
+    link_state(beh_verify.id, "到状态", st_normal.id)
+
+    # --- Rules (structure for L3 execution) ---
+    rule_pressure = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("rule", "压力高阈值（PressureHigh）"),
+        "压力高阈值（PressureHigh）",
+        "Rule",
+        {
+            "source": "behavior_model",
+            "trigger": "pressure > threshold",
+            "action": "触发异常识别",
+            # L3 可执行字段（关键）
+            "metric": "pressure",
+            "op": ">",
+            "threshold": 8.5,
+            "weight": 0.55,
+            "severity": "high",
+            "governs_behavior": beh_detect.name,
+        },
+    )
+    rule_flow = store.upsert_draft_entity_by_id(
+        draft_id,
+        eid("rule", "流量低阈值（FlowLow）"),
+        "流量低阈值（FlowLow）",
+        "Rule",
+        {
+            "source": "behavior_model",
+            "trigger": "flow < threshold",
+            "action": "触发异常识别",
+            "metric": "flow",
+            "op": "<",
+            "threshold": 60.0,
+            "weight": 0.35,
+            "severity": "medium",
+            "governs_behavior": beh_detect.name,
+        },
+    )
+
+    # rules -> behavior
+    for r in [rule_pressure, rule_flow]:
+        store.upsert_draft_relation_by_id(
+            draft_id,
+            rid("governs", r.id, "约束", beh_detect.id),
+            src=r.id,
+            dst=beh_detect.id,
+            rel_type="约束",
+            props={"source": "behavior_model"},
+        )
+        # rule involves segment
+        store.upsert_draft_relation_by_id(
+            draft_id,
+            rid("involves", r.id, "涉及", obj_seg.id),
+            src=r.id,
+            dst=obj_seg.id,
+            rel_type="涉及",
+            props={"source": "behavior_model"},
+        )
+
+    return {
+        "ok": True,
+        "draft_id": draft_id,
+        "message": "behavior model initialized",
+    }
 
 
 @router.delete("/ontology/drafts/{draft_id}", response_model=dict)

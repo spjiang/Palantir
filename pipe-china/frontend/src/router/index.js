@@ -36,7 +36,7 @@ const routes = [
           layerTitle: "L1 数据接入与治理",
           sidebar: [
             { label: "概览", to: "/l1/overview" },
-            { label: "数据质量", to: "/l1/data-quality" },
+            { label: "手动写入/数据模拟", to: "/l1/data-quality" },
           ],
         },
         children: [

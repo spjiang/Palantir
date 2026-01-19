@@ -93,7 +93,8 @@ function isActiveLayer(key) {
     linear-gradient(180deg, rgba(6, 18, 42, 0.82), rgba(6, 18, 42, 0.62));
   color: #e2e8f0;
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(10px);
+  /* NOTE: backdrop-filter 在部分浏览器/显卡驱动上会导致长时间运行后花屏/卡死，先禁用以提升稳定性 */
+  backdrop-filter: none;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
 }
 .brand {
@@ -165,7 +166,8 @@ function isActiveLayer(key) {
   color: rgba(226, 232, 240, 0.92);
   border-right: 1px solid var(--border);
   padding: 12px 10px; /* 更紧凑 */
-  backdrop-filter: blur(10px);
+  /* NOTE: 同上，禁用毛玻璃以避免 GPU 花屏/卡死 */
+  backdrop-filter: none;
 }
 .side-title {
   font-weight: 900;
