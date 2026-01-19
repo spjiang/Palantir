@@ -302,7 +302,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
 
@@ -1238,6 +1238,9 @@ const query = ref({ root_id: "", depth: 3 });
 
 const cyEl = ref(null);
 const cy = ref(null);
+const unmounting = ref(false);
+const extractCtrl = ref(null);
+const extractReader = ref(null);
 
 const selected = ref(null); // {kind:'node'|'edge', id}
 const editNode = ref({ id: "", name: "", label: "Concept", propsText: "{}" });
@@ -1636,13 +1639,22 @@ async function extract() {
   try {
     // 高级感：流式实时展示 DeepSeek 抽取过程（SSE over fetch stream）
     resetStreamPanel();
-    const res = await fetch(`${props.apiBase}/ontology/extract/stream`, { method: "POST", body: fd });
+    try {
+      extractCtrl.value?.abort?.();
+    } catch {
+      // ignore
+    }
+    const ctrl = new AbortController();
+    extractCtrl.value = ctrl;
+    const res = await fetch(`${props.apiBase}/ontology/extract/stream`, { method: "POST", body: fd, signal: ctrl.signal });
     if (!res.ok) throw new Error(await res.text());
     if (!res.body) throw new Error("浏览器不支持流式读取");
     const reader = res.body.getReader();
+    extractReader.value = reader;
     const decoder = new TextDecoder("utf-8");
     let buf = "";
     while (true) {
+      if (unmounting.value) break;
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
@@ -1704,8 +1716,16 @@ async function extract() {
       }
     }
   } catch (e) {
+    if (e?.name === "AbortError") return;
     toastError(`抽取失败: ${e}`);
   } finally {
+    try {
+      extractReader.value?.cancel?.();
+    } catch {
+      // ignore
+    }
+    extractReader.value = null;
+    extractCtrl.value = null;
     loading.value = false;
   }
 }
@@ -1926,6 +1946,37 @@ async function purgeAll() {
 
 onMounted(async () => {
   await refresh();
+});
+
+onBeforeUnmount(() => {
+  unmounting.value = true;
+  // 中断流式抽取
+  try {
+    extractCtrl.value?.abort?.();
+  } catch {
+    // ignore
+  }
+  try {
+    extractReader.value?.cancel?.();
+  } catch {
+    // ignore
+  }
+  extractCtrl.value = null;
+  extractReader.value = null;
+  // 清理流式布局计时器
+  try {
+    if (streamGraph.value.layoutTimer) clearTimeout(streamGraph.value.layoutTimer);
+  } catch {
+    // ignore
+  }
+  streamGraph.value.layoutTimer = null;
+  // 释放 cytoscape（否则切页后仍保留大量监听/布局对象，可能导致长时间后卡死/花屏）
+  try {
+    if (cy.value) cy.value.destroy();
+  } catch {
+    // ignore
+  }
+  cy.value = null;
 });
 
 watch(
@@ -2370,7 +2421,8 @@ async function saveEdgeAndClose() {
   position: fixed;
   inset: 0;
   background: rgba(2, 6, 23, 0.72);
-  backdrop-filter: blur(6px);
+  /* NOTE: backdrop-filter 在部分浏览器/显卡驱动上会导致长时间运行后花屏/卡死，禁用以提升稳定性 */
+  backdrop-filter: none;
   z-index: 9999;
   display: flex;
   align-items: center;

@@ -222,7 +222,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
   apiBase: { type: String, required: true },
@@ -691,6 +691,23 @@ onMounted(async () => {
   } catch (e) {
     console.error(e);
     alert(`L1 初始化失败：${e.message}`);
+  }
+});
+
+onBeforeUnmount(() => {
+  // 防止页面切换后仍有未完成请求/计时器占用主线程
+  try {
+    if (scheduledRefreshTimer) clearTimeout(scheduledRefreshTimer);
+  } catch {
+    // ignore
+  }
+  scheduledRefreshTimer = null;
+  try {
+    reqCtrl.value.segments?.abort?.();
+    reqCtrl.value.sensors?.abort?.();
+    reqCtrl.value.tables?.abort?.();
+  } catch {
+    // ignore
   }
 });
 </script>

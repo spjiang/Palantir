@@ -168,6 +168,25 @@ class OntologyStore:
                 )
             return items
 
+    def list_draft_ids(self, limit: int = 50) -> list[str]:
+        """
+        返回当前图数据库中存在的草稿 draft_id 列表（去重）。
+        用于前端下拉选择（L2/L4/L3 等）。
+        """
+        query = """
+        MATCH (n:DraftConcept)
+        RETURN DISTINCT n.draft_id AS draft_id
+        ORDER BY n.draft_id DESC
+        LIMIT $limit
+        """
+        with self.driver.session() as session:
+            out: list[str] = []
+            for rec in session.run(query, limit=max(1, min(int(limit), 200))):
+                did = (rec.get("draft_id") or "").strip()
+                if did:
+                    out.append(did)
+            return out
+
     def list_draft_relations(self, draft_id: str, limit: int = 5000) -> list[Relation]:
         query = """
         MATCH (s:DraftConcept {draft_id:$draft_id})-[r:DREL {draft_id:$draft_id}]->(d:DraftConcept {draft_id:$draft_id})

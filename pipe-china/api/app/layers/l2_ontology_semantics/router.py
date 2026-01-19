@@ -29,6 +29,15 @@ logger = logging.getLogger("pipe_china.api")
 router = APIRouter(tags=["L2-OntologySemantics"])
 
 
+@router.get("/ontology/drafts")
+def list_drafts(limit: int = 50):
+    """
+    列出当前存在的草稿 draft_id（用于下拉选择）。
+    """
+    limit = max(1, min(int(limit or 50), 200))
+    return {"items": store.list_draft_ids(limit=limit)}
+
+
 @router.post("/ontology/extract", response_model=DraftExtractResponse)
 async def extract_ontology(file: UploadFile = File(...)):
     """

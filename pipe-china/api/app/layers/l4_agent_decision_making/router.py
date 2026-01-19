@@ -70,6 +70,49 @@ def _llm_decide_task(*, alarm: dict[str, Any], behaviors: list[dict[str, Any]]) 
         return None
 
 
+def _llm_decide_task_from_risk(*, risk: dict[str, Any], segment: dict[str, Any], behaviors: list[dict[str, Any]], default_task_type: str) -> dict[str, Any] | None:
+    """
+    可选：调用 DeepSeek（若配置了 key）让大模型基于 L3 风险事件 + 行为候选，生成任务建议。
+    没有 key / 失败则返回 None，走确定性兜底。
+    """
+    if not DEEPSEEK_API_KEY:
+        return None
+    try:
+        client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+        prompt = {
+            "role": "user",
+            "content": (
+                "你是油气管网运维的智能体决策模块（L4）。\n"
+                "给定一条风险事件（L3 输出）与候选行为列表，请选择最合适的行为并生成一个运维任务。\n"
+                "只输出严格 JSON：{ \"task_type\": \"巡检|处置|复核\", \"title\": \"...\", \"reason\": \"...\", \"chosen_behavior\": \"...\" }\n"
+                f"默认 task_type 建议：{default_task_type}\n\n"
+                f"管段（segment）：{segment}\n\n"
+                f"风险事件（risk_event）：{risk}\n\n"
+                f"候选行为（behaviors）：{behaviors}\n"
+            ),
+        }
+        resp = client.chat.completions.create(
+            model=DEEPSEEK_MODEL or "deepseek-chat",
+            messages=[prompt],
+            temperature=0.2,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        import json
+
+        # 容错：模型可能带 ```json
+        if "```" in text:
+            parts = [p.strip() for p in text.split("```") if p.strip()]
+            for p in parts:
+                pp = p
+                if pp.lower().startswith("json"):
+                    pp = pp[4:].strip()
+                if pp.startswith("{") and pp.endswith("}"):
+                    return json.loads(pp)
+        return json.loads(text)
+    except Exception:
+        return None
+
+
 @router.post("/agent/decide")
 def decide(payload: AgentDecideRequest):
     """
@@ -99,8 +142,9 @@ def decide(payload: AgentDecideRequest):
     if order.get(state, 0) < order.get(payload.min_risk_state, 2):
         return {"ok": True, "created": False, "reason": f"风险状态={state} 未达到触发阈值 {payload.min_risk_state}", "risk": risk}
 
-    # 从 L2 草稿中挑一个“推荐行为”（用于标题解释）
+    # 从 L2 草稿中读取行为候选（供大模型/兜底策略使用）
     behaviors = [e for e in store.list_draft_entities(payload.draft_id, limit=5000) if (e.label or "") == "Behavior"]
+    candidates = [{"id": b.id, "name": b.name, "props": b.props or {}} for b in behaviors]
     preferred_beh = None
     # 简单策略：高风险优先“处置”，否则“巡检/复核”
     if state == "高风险":
@@ -108,15 +152,23 @@ def decide(payload: AgentDecideRequest):
     else:
         preferred_beh = next((b for b in behaviors if "巡检" in (b.name or "")), None) or next((b for b in behaviors if "复核" in (b.name or "")), None) or (behaviors[0] if behaviors else None)
 
+    llm = _llm_decide_task_from_risk(risk=risk, segment=seg, behaviors=candidates, default_task_type=payload.task_type) if candidates else None
     beh_name = preferred_beh.name if preferred_beh else None
+    reason = None
     title = f"{payload.task_type}任务：{seg['name']}（{state}，score={score:.2f}）"
+    task_type = payload.task_type
+    if llm:
+        task_type = llm.get("task_type") or task_type
+        title = llm.get("title") or title
+        reason = llm.get("reason")
+        beh_name = llm.get("chosen_behavior") or beh_name
     if beh_name:
         title = f"{title} · 来源行为：{beh_name}"
 
     # 创建 L5 任务（落库 Postgres）
     task = pg.create_task(
         title=title,
-        task_type=payload.task_type,
+        task_type=task_type,
         draft_id=payload.draft_id,
         target_entity_id=_segment_node_id(payload.segment_id),
         target_entity_name=seg["name"],
@@ -138,6 +190,7 @@ def decide(payload: AgentDecideRequest):
                 "risk_score": score,
                 "risk_event_id": risk.get("id"),
                 "source_behavior": beh_name,
+                "llm_reason": reason,
             },
         )
         rel_id = f"rel-l4-targets-{task['id']}"

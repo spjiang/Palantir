@@ -385,6 +385,7 @@ class PostgresStore:
         self,
         *,
         segment_id: str | None = None,
+        draft_id: str | None = None,
         source: str | None = None,
         limit: int = 200,
     ) -> list[dict[str, Any]]:
@@ -398,6 +399,9 @@ class PostgresStore:
         if segment_id:
             where.append("a.segment_id=%s")
             params.append(segment_id)
+        if draft_id:
+            where.append("(a.raw->>'draft_id')=%s")
+            params.append(str(draft_id))
         if source:
             where.append("(a.raw->>'source')=%s")
             params.append(str(source))

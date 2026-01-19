@@ -19,6 +19,7 @@
         <div class="btnrow">
           <button class="btn secondary" @click="loadDraftIdFromSession">读取当前 draftId</button>
           <button class="btn" :disabled="loading" @click="fetchTopN">刷新 TopN</button>
+          <button class="btn" :disabled="loading" @click="syncFromL1">同步（批量推理）</button>
           <button class="btn danger" :disabled="loading" @click="purgeTopNData">清空 TopN 数据</button>
         </div>
       </div>
@@ -270,6 +271,7 @@ const draftRules = ref([]);
 const draftBehaviors = ref([]);
 const draftStates = ref([]);
 const l4Resp = ref(null);
+const syncResp = ref(null);
 
 function fmt(ts) {
   try {
@@ -356,6 +358,37 @@ async function fetchTopN() {
   } catch (e) {
     console.error(e);
     alert(`获取 TopN 失败：${e.message}`);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function syncFromL1() {
+  if (!draftId.value) {
+    alert("请先填写/读取 draftId（同步需要从草稿图谱读取规则/行为）。");
+    return;
+  }
+  loading.value = true;
+  try {
+    const res = await api("/risk/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        draft_id: draftId.value,
+        limit: 10,
+        reasoning_mode: evalReasoningMode.value || "deepseek",
+        write_back_to_draft: true,
+      }),
+    });
+    syncResp.value = res;
+    // 用批量结果直接更新“管段风险 TopN”
+    items.value = res.topn || [];
+    // 同步后通常会产生 L3 预警结论，刷新预警 TopN
+    await fetchAlertTopN();
+    alert(`同步完成：成功 ${res.processed} 条，失败 ${res.failed} 条`);
+  } catch (e) {
+    console.error(e);
+    alert(`同步失败：${e.message}`);
   } finally {
     loading.value = false;
   }

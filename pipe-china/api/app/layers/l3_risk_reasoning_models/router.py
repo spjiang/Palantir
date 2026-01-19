@@ -317,6 +317,7 @@ def _is_l3_alarm(a: dict[str, Any]) -> bool:
 
 def _ensure_l3_alarm(
     *,
+    draft_id: str | None,
     segment_id: str,
     sensor_id: str | None,
     reading_id: str | None,
@@ -340,7 +341,14 @@ def _ensure_l3_alarm(
         sensor_id=sensor_id,
         segment_id=segment_id,
         reading_id=reading_id,
-        raw={"source": "l3", "rule_id": rule_id, "metric": rule.get("metric"), "op": rule.get("op"), "threshold": rule.get("threshold")},
+        raw={
+            "source": "l3",
+            "draft_id": draft_id,
+            "rule_id": rule_id,
+            "metric": rule.get("metric"),
+            "op": rule.get("op"),
+            "threshold": rule.get("threshold"),
+        },
     )
     return a["id"]
 
@@ -350,6 +358,17 @@ class RiskEvaluateRequest(BaseModel):
     segment_id: str = Field(..., description="L1 管段ID（seg-xxx）")
     write_back_to_draft: bool = Field(default=True, description="是否把风险状态回写到 L2 草稿图谱")
     reasoning_mode: str = Field(default="auto", description="auto|rule_engine|deepseek；auto=有 DEEPSEEK key 则 deepseek 否则 rule_engine")
+
+
+class RiskSyncRequest(BaseModel):
+    """
+    L3 同步：批量读取 L1 管段/传感器/读数，结合 L2 草稿规则/行为，逐管段调用推理并生成预警。
+    """
+
+    draft_id: str | None = Field(default=None, description="可选：使用草稿本体规则/行为（draft_id）")
+    limit: int = Field(default=10, description="最多同步多少个管段（按 L1 管段列表顺序）")
+    reasoning_mode: str = Field(default="deepseek", description="deepseek|rule_engine|auto")
+    write_back_to_draft: bool = Field(default=True, description="是否回写草稿状态/实例关系")
 
 
 @router.get("/risk/topn")
@@ -460,7 +479,7 @@ def risk_topn(
 
 
 @router.get("/risk/alerts/topn")
-def alert_topn(segment_id: str | None = None, limit: int = 20):
+def alert_topn(draft_id: str | None = None, segment_id: str | None = None, limit: int = 20):
     """
     预警 TopN（更贴近“TopN 就是预警列表”）：
     - 直接返回 L3 推理产生的“告警结论”（PG alarms，raw.source=l3）
@@ -468,11 +487,63 @@ def alert_topn(segment_id: str | None = None, limit: int = 20):
     """
     _require_pg()
     limit = max(1, min(int(limit or 20), 200))
-    rows = pg.list_alarms_enriched(segment_id=segment_id, source="l3", limit=500)
+    rows = pg.list_alarms_enriched(draft_id=draft_id, segment_id=segment_id, source="l3", limit=500)
     sev_rank = {"high": 3, "medium": 2, "low": 1}
     rows.sort(key=lambda a: (sev_rank.get(str(a.get("severity") or "").lower(), 0), a.get("ts") or ""), reverse=True)
     return {"items": rows[:limit]}
 
+
+@router.post("/risk/sync")
+def risk_sync(payload: RiskSyncRequest):
+    """
+    L3 同步按钮使用：
+    - 批量从 L1 拉取管段
+    - 对每个管段依次执行 /risk/evaluate（会：查草稿规则/行为、调用大模型推理、生成预警、写入 risk_event）
+    - 返回：批量推理结果 TopN（无需再次调用 /risk/topn）
+    """
+    _require_pg()
+    limit = max(1, min(int(payload.limit or 10), 50))
+    segs = pg.list_segments()[:limit]
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    for seg in segs:
+        try:
+            out = risk_evaluate(
+                RiskEvaluateRequest(
+                    draft_id=payload.draft_id,
+                    segment_id=seg["id"],
+                    write_back_to_draft=payload.write_back_to_draft,
+                    reasoning_mode=payload.reasoning_mode,
+                )
+            )
+            # 统一字段，供前端直接展示“管段风险 TopN”
+            results.append(
+                {
+                    "segment_id": out.get("segment_id"),
+                    "segment_name": out.get("segment_name"),
+                    "risk_score": out.get("risk_score"),
+                    "risk_state": out.get("risk_state"),
+                    "explain": out.get("explain"),
+                    "latest_pressure": out.get("latest_pressure"),
+                    "latest_flow": out.get("latest_flow"),
+                    "alarm_count": out.get("alarm_count"),
+                    "sensor_count": out.get("sensor_count"),
+                    "reasoning_mode": out.get("reasoning_mode"),
+                }
+            )
+        except Exception as e:
+            errors.append({"segment_id": seg.get("id"), "segment_name": seg.get("name"), "error": str(e)})
+
+    results.sort(key=lambda x: float(x.get("risk_score") or 0.0), reverse=True)
+    return {
+        "ok": True,
+        "draft_id": payload.draft_id,
+        "processed": len(results),
+        "failed": len(errors),
+        "errors": errors[:20],
+        "topn": results[: max(1, min(limit, 100))],
+    }
 
 @router.post("/risk/evaluate")
 def risk_evaluate(payload: RiskEvaluateRequest):
@@ -603,7 +674,7 @@ def risk_evaluate(payload: RiskEvaluateRequest):
                 }
                 msg = (a.get("message") or "").strip() or f"{rule_obj.get('name')}: 命中规则（DeepSeek）"
                 try:
-                    aid = _ensure_l3_alarm(segment_id=seg["id"], sensor_id=sensor_id, reading_id=reading_id, rule=rule_obj, message=msg)
+                    aid = _ensure_l3_alarm(draft_id=payload.draft_id, segment_id=seg["id"], sensor_id=sensor_id, reading_id=reading_id, rule=rule_obj, message=msg)
                     derived_alarm_ids.append(aid)
                 except Exception:
                     pass
@@ -633,7 +704,7 @@ def risk_evaluate(payload: RiskEvaluateRequest):
                     sid = latest_sensor_id_by_metric.get(metric)
                     msg = f"{r.get('name') or r.get('id')}: {metric} {op} {thr}（当前 {v}）"
                     try:
-                        aid = _ensure_l3_alarm(segment_id=seg["id"], sensor_id=sid, reading_id=rid, rule=r, message=msg)
+                        aid = _ensure_l3_alarm(draft_id=payload.draft_id, segment_id=seg["id"], sensor_id=sid, reading_id=rid, rule=r, message=msg)
                         derived_alarm_ids.append(aid)
                     except Exception:
                         # 告警结论写入失败不影响风险结论主体
